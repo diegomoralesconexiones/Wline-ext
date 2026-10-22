@@ -29,7 +29,8 @@ const MARCA = `#${RUN}`;
 const SECRET = "secreto-del-webhook-de-zernio";
 const LLAVE = "sk_llave-de-zernio-ventana";
 const PN = "PN-E2E-1";
-const HORA = 60 * 60 * 1000;
+const MINUTO = 60 * 1000;
+const HORA = 60 * MINUTO;
 const DIA = 24 * HORA;
 const CUENTA = { ig: `ig-vs-${RUN}`, fb: `fb-vs-${RUN}`, tt: `tt-vs-${RUN}` };
 const PLATAFORMA = { ig: "instagram", fb: "facebook", tt: "tiktok" };
@@ -226,6 +227,7 @@ async function main() {
 
   await textoPlano();
   await ventanaHumana();
+  await horaQueNoRetrocede();
   await agenteIncluido();
 
   console.log(`\n${checks - failures}/${checks} checks en verde`);
@@ -405,6 +407,60 @@ async function ventanaHumana() {
       JSON.stringify(c?.composer)
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// 031 · D2 — La hora de la conversación no retrocede
+// ---------------------------------------------------------------------------
+
+async function horaQueNoRetrocede() {
+  console.log("\n== 031: un entrante tardío no mueve hacia atrás la hora de la conversación ==");
+  const { conv: antes, sender, nombre } = await conversacion("ig", "orden", MINUTO);
+  if (!antes) {
+    ok("Instagram: la conversación se abrió", false);
+    return;
+  }
+
+  // Zernio reintenta hasta 7 veces en ~51 h: un mensaje de hace 20 h (otro id)
+  // llega DESPUÉS del de hace un minuto.
+  const tardio = `mensaje de hace 20 h ${MARCA}`;
+  const e = await entranteSocial("ig", { sender, nombre, text: tardio, hace: 20 * HORA });
+  ok("el entrante tardío se acepta → 200", e.status === 200, String(e.status));
+  // La ingesta suma el no leído en la misma actualización que mueve la hora:
+  // cuando sube, la conversación ya quedó como va a quedar.
+  const tras = await hasta(async () => {
+    const c = (await conversaciones()).find((x) => x.id === antes.id);
+    return c && c.unreadCount > antes.unreadCount ? c : null;
+  });
+  const enHilo = (await mensajesDe(antes.id)).find((m) => m.text === tardio);
+  ok(
+    "el mensaje tardío entra al hilo con su propia hora",
+    Boolean(enHilo) && Math.abs(Date.parse(enHilo.createdAt) - (Date.now() - 20 * HORA)) < 5 * MINUTO,
+    JSON.stringify(enHilo?.createdAt)
+  );
+  ok(
+    "lastInboundAt sigue en la hora del más nuevo (AC4)",
+    Boolean(tras) && tras.lastInboundAt === antes.lastInboundAt,
+    `${antes.lastInboundAt} → ${tras?.lastInboundAt}`
+  );
+  ok(
+    "lastMessageAt tampoco retrocede (AC4)",
+    Boolean(tras) && tras.lastMessageAt === antes.lastMessageAt,
+    `${antes.lastMessageAt} → ${tras?.lastMessageAt}`
+  );
+  ok("y la ventana sigue abierta", tras?.windowOpen === true, JSON.stringify(tras?.windowOpen));
+
+  // Uno posterior sí la avanza, como siempre.
+  await entranteSocial("ig", { sender, nombre, text: `y ahora otra cosa ${MARCA}` });
+  const avanzada = await hasta(async () => {
+    const c = (await conversaciones()).find((x) => x.id === antes.id);
+    return c && Date.parse(c.lastInboundAt) > Date.parse(antes.lastInboundAt) ? c : null;
+  });
+  ok(
+    "un mensaje posterior sí avanza la hora (AC5)",
+    Boolean(avanzada) && Date.now() - Date.parse(avanzada.lastInboundAt) < MINUTO,
+    JSON.stringify(avanzada?.lastInboundAt)
+  );
 }
 
 // ---------------------------------------------------------------------------

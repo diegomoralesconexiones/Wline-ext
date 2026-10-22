@@ -504,11 +504,18 @@ export async function ingestInboundMessage(input: {
     ? await attachMediaAsset(organizationId, message.id, input.media)
     : null;
 
+  // 031 · D2: la hora de la conversación nunca retrocede. Zernio reintenta
+  // hasta 7 veces en ~51 h y Meta tampoco garantiza el orden: un entrante
+  // tardío entra al hilo, pero no acorta la ventana ni baja la conversación en
+  // la lista. `greatest` ignora los nulos, así que una conversación nueva toma
+  // la hora del mensaje. El parámetro va como `timestamp`, igual que la
+  // columna: así no depende de la zona horaria de la sesión.
+  const hora = waTimestamp.toISOString();
   await db
     .update(schema.conversation)
     .set({
-      lastInboundAt: waTimestamp,
-      lastMessageAt: waTimestamp,
+      lastInboundAt: sql`greatest(${schema.conversation.lastInboundAt}, ${hora}::timestamp)`,
+      lastMessageAt: sql`greatest(${schema.conversation.lastMessageAt}, ${hora}::timestamp)`,
       unreadCount: sql`${schema.conversation.unreadCount} + 1`,
       updatedAt: new Date(),
     })
