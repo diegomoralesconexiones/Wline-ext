@@ -10,6 +10,16 @@ export default defineConfig({
   test: {
     include: ["tests/unit/**/*.test.ts"],
     environment: "node",
+    // Solo con `--coverage` (CONSTRAINTS.md): `pnpm test` sigue igual de
+    // rápido. `json-summary` es lo que compara el trinquete; `lcovonly`, lo
+    // que se cruza con el diff para la cobertura de las líneas nuevas. No
+    // `lcov`: su informe HTML trae JavaScript que ESLint acaba revisando.
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      reporter: ["text-summary", "json-summary", "lcovonly"],
+      reportsDirectory: "coverage",
+    },
   },
   resolve: {
     alias: {

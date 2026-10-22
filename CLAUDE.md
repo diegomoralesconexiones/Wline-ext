@@ -137,6 +137,9 @@ Gate técnico:
 pnpm typecheck && pnpm lint && pnpm build && pnpm test
 ```
 
+Lee [CONSTRAINTS.md](CONSTRAINTS.md) antes de escribir código y no lo aflojes
+para que un cambio pase. Al terminar cada tarea, `pnpm check:task`.
+
 Guiones E2E por historia en `tests/e2e/*.md`. Parte de ellos ya están
 automatizados: con la app viva y los mocks encendidos, `pnpm test:e2e`
 (`scripts/e2e-selftest.mjs`) los conduce contra la app real y sale distinto de
@@ -166,3 +169,27 @@ repo ya registra. Los subagentes con `memory: project` usan
 2. **Subagentes** (`.claude/agents/`): `deploy-ops` (deploy/logs/healthchecks,
    no escribe código de app) · `public-site-builder` (páginas públicas/legales
    y config de paneles externos).
+
+## graphify (opcional)
+
+Si existe `graphify-out/graph.json` (grafo del código generado con
+[graphify](https://github.com/Graphify-Labs/graphify); no se versiona), úsalo
+para ubicar código antes de buscar a mano. Si no existe, ignora esta sección.
+
+- Antes del primer Grep/Glob/lectura de código para una pregunta del codebase,
+  consulta el grafo. Lee archivos crudos solo en las líneas que el grafo (o una
+  lectura previa) ya ubicó. Pon esta regla en todo prompt de subagente que
+  explore código.
+- Prefiere comandos con nombres concretos de símbolo o archivo; `graphify query`
+  en lenguaje natural empareja por palabra clave y da ruido:
+  - `graphify affected "inbox/send.ts" --depth 1` — quién importa/llama a X
+    (impacto antes de cambiarlo).
+  - `graphify explain "deliverReply"` — vecinos de un nodo con archivo:línea.
+  - `graphify path "A" "B"` — cómo se conecta un módulo con otro.
+  - `graphify query "<pregunta>" --budget 1500` — último recurso, con presupuesto.
+- `graphify-out/GRAPH_REPORT.md` solo para revisión amplia de arquitectura
+  (comunidades, god nodes).
+- Con `graphify hook install` el grafo se actualiza solo en cada
+  commit/checkout/merge (solo AST, sin costo de API). Tras cambios grandes sin
+  commit, `graphify update .`.
+- El grafo cubre solo código, no `specs/` ni `docs/`: para esos, busca normalmente.
