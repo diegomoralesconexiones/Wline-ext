@@ -8,7 +8,7 @@ import { chatJson, type ChatMessage } from "@/lib/ai";
 import { isAiConfiguredFor } from "@/lib/ai/provider";
 import { publish } from "@/server/events/bus";
 import { isWindowOpen } from "@/server/inbox/window";
-import { windowMsFor } from "@/server/channels/capabilities";
+import { MAX_REPLY_PARTS, replyParts, windowMsFor } from "@/server/channels/capabilities";
 import { SendError, sendText } from "@/server/inbox/send";
 import {
   agentActionSchema,
@@ -388,32 +388,47 @@ async function deliverReply(
   conversation: Conversation,
   text: string
 ): Promise<void> {
+  // 031 · D8 — Un texto que no cabe en el canal sale en varios mensajes que sí
+  // caben, en orden: antes el envío fallaba y el agente se quedaba callado. Se
+  // parte ANTES de separar el Laboratorio, para que is_test guarde las mismas
+  // partes que recibiría el cliente.
+  const partes = replyParts(conversation.channel, text);
+  if (partes.length === MAX_REPLY_PARTS) {
+    // Solo el id: el texto del cliente no va a los logs.
+    console.warn(
+      `[agente] ${conversation.id}: la respuesta ocupó el tope de ${MAX_REPLY_PARTS} mensajes; si era más larga, se recortó.`
+    );
+  }
   if (conversation.isTest) {
-    await persistTestOutbound(conversation, text);
+    for (const parte of partes) await persistTestOutbound(conversation, parte);
     return;
   }
-  try {
-    await sendText({
-      conversationId: conversation.id,
-      organizationId: conversation.organizationId,
-      text,
-      aiGenerated: true,
-    });
-  } catch (err) {
-    if (err instanceof SendError && err.code === "window_closed") {
-      await applyHandoff(conversation.id, conversation.organizationId, "ventana");
-      return;
+  for (const parte of partes) {
+    try {
+      await sendText({
+        conversationId: conversation.id,
+        organizationId: conversation.organizationId,
+        text: parte,
+        aiGenerated: true,
+      });
+    } catch (err) {
+      // Si la ventana se cerró a media respuesta, las partes que faltan
+      // tampoco saldrían: se traspasa y se para aquí (AC21).
+      if (err instanceof SendError && err.code === "window_closed") {
+        await applyHandoff(conversation.id, conversation.organizationId, "ventana");
+        return;
+      }
+      // 022 — El canal ya no admite más mensajes hasta que el cliente escriba
+      // (el tope de TikTok). No se traspasa: dejaría la IA en pausa para siempre
+      // por algo que se arregla solo con el siguiente mensaje del cliente.
+      if (err instanceof SendError && err.code === "message_limit") {
+        console.warn(
+          `[agente] ${conversation.id}: ${err.message}. No se envía y la IA sigue activa.`
+        );
+        return;
+      }
+      throw err;
     }
-    // 022 — El canal ya no admite más mensajes hasta que el cliente escriba
-    // (el tope de TikTok). No se traspasa: dejaría la IA en pausa para siempre
-    // por algo que se arregla solo con el siguiente mensaje del cliente.
-    if (err instanceof SendError && err.code === "message_limit") {
-      console.warn(
-        `[agente] ${conversation.id}: ${err.message}. No se envía y la IA sigue activa.`
-      );
-      return;
-    }
-    throw err;
   }
 }
 

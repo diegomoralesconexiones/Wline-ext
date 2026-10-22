@@ -105,8 +105,8 @@ export type ZernioEvent = {
  * Hora del mensaje en segundos, la que trae el evento y no la de llegada.
  *
  * Importa porque `lastInboundAt` es lo que abre la ventana de 24 h: sellar con
- * la hora de ingesta haría que una reentrega tardía —Zernio reintenta con
- * backoff de hasta 24 h, y su panel permite reenviar a mano— pareciera un
+ * la hora de ingesta haría que una reentrega tardía —Zernio reintenta hasta 7
+ * veces en ~51 h, y su panel permite reenviar a mano— pareciera un
  * mensaje recién llegado, y el CRM ofrecería escribir libre por una ventana
  * que en realidad ya se cerró. El envío lo rechazaría la plataforma, y el
  * operador no tendría forma de entender por qué.

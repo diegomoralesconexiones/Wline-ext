@@ -47,3 +47,6 @@ scratch/
 
 # graphify
 graphify-out/
+
+# Cobertura de Vitest (CONSTRAINTS.md): se regenera en cada corrida
+coverage/

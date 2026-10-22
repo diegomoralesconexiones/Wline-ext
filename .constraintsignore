@@ -1,0 +1,4 @@
+# Rutas que scripts/floor-guard.mjs no mira. El motivo de cada una está en
+# CONSTRAINTS.md («Rutas fuera de la guardia»); agregar una es aflojar el piso.
+.claude/skills/**
+scripts/floor-guard.mjs

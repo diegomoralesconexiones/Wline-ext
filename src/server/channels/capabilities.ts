@@ -1,4 +1,5 @@
 import { CHANNEL_LABEL, type Channel } from "@/lib/channels";
+import { plainSocialText } from "@/lib/social-text";
 
 /**
  * 014 — Capacidades declaradas por canal.
@@ -204,6 +205,117 @@ export function textFits(channel: Channel, text: string): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * 031 — Como mucho, en cuántos mensajes sale una respuesta del agente. Más ya
+ * es una ráfaga: Meta limita por destinatario y nadie lee cinco DMs seguidos.
+ */
+export const MAX_REPLY_PARTS = 5;
+
+/** Con qué termina la última parte cuando la respuesta no cupo en el tope. */
+const RECORTE = "…";
+
+/**
+ * Dónde se puede cortar, de mejor a peor: entre párrafos (una línea en
+ * blanco), después de una frase y entre palabras. El separador se captura
+ * para devolverlo tal cual dentro de una parte.
+ */
+const CORTES = [/(\n[ \t]*\n\s*)/, /(?<=[.!?…])(\s+)/, /(\s+)/];
+
+/**
+ * 031 · D8 — Parte un texto que no cabe en el canal en trozos que sí caben,
+ * en orden, llenando cada uno al máximo. Corta primero por párrafos, después
+ * por frases, después por palabras y, solo si una palabra no cabe, por puntos
+ * de código: nunca parte un emoji ni una letra acentuada. Sin partes vacías y
+ * con un tope de `MAX_REPLY_PARTS`.
+ *
+ * Mide con `textFits`, así que respeta lo que declare cada canal: bytes en
+ * Instagram y Messenger, caracteres en WhatsApp y TikTok. Un texto que cabe
+ * sale entero, tal cual.
+ */
+export function splitToFit(channel: Channel, text: string): string[] {
+  return partir(text, (t) => textFits(channel, t));
+}
+
+/**
+ * 031 · D8 — Las partes en que sale una respuesta del agente: el texto final
+ * que leerá el cliente (sin marcas en los canales `plain`, como lo deja
+ * `sendText`), partido para que quepa.
+ */
+export function replyParts(channel: Channel, text: string): string[] {
+  if (capabilitiesFor(channel).textFormat !== "plain") return splitToFit(channel, text);
+  // `sendText` vuelve a limpiar cada parte. Limpiar el texto entero no basta:
+  // un corte puede dejar al inicio de una parte un «- » que iba a media línea,
+  // y al limpiarla se vuelve viñeta, dos bytes más que lo medido. Por eso se
+  // mide cada trozo ya limpio y se entrega limpio.
+  return partir(plainSocialText(text), (t) => textFits(channel, plainSocialText(t))).map(
+    plainSocialText
+  );
+}
+
+function partir(text: string, cabe: (t: string) => boolean): string[] {
+  if (cabe(text)) return [text];
+  const partes = enCascada(text, cabe, 0)
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
+  if (partes.length <= MAX_REPLY_PARTS) return partes;
+  const ultima = partes[MAX_REPLY_PARTS - 1]!;
+  return [...partes.slice(0, MAX_REPLY_PARTS - 1), recortada(ultima, cabe)];
+}
+
+function enCascada(text: string, cabe: (t: string) => boolean, nivel: number): string[] {
+  const corte = CORTES[nivel];
+  if (!corte) return porPuntosDeCodigo(text, cabe);
+  // Con el separador capturado, `split` alterna: [trozo, separador, trozo…].
+  const trozos = text.split(corte);
+  const partes: string[] = [];
+  let actual = "";
+  for (let i = 0; i < trozos.length; i += 2) {
+    const trozo = trozos[i]!;
+    if (trozo === "") continue;
+    const junto = actual ? `${actual}${trozos[i - 1] ?? ""}${trozo}` : trozo;
+    if (cabe(junto)) {
+      actual = junto;
+      continue;
+    }
+    if (actual) partes.push(actual);
+    if (cabe(trozo)) {
+      actual = trozo;
+      continue;
+    }
+    // El trozo solo ya no cabe: se baja de nivel, y su último pedazo sigue
+    // abierto para que lo que viene después lo complete.
+    const dentro = enCascada(trozo, cabe, nivel + 1);
+    partes.push(...dentro.slice(0, -1));
+    actual = dentro.at(-1) ?? "";
+  }
+  if (actual) partes.push(actual);
+  return partes;
+}
+
+function porPuntosDeCodigo(text: string, cabe: (t: string) => boolean): string[] {
+  const partes: string[] = [];
+  let actual = "";
+  for (const c of text) {
+    if (cabe(actual + c)) actual += c;
+    else {
+      if (actual) partes.push(actual);
+      actual = c;
+    }
+  }
+  if (actual) partes.push(actual);
+  return partes;
+}
+
+/** La última parte, cortada en una palabra para que quepa con el «…». */
+function recortada(parte: string, cabe: (t: string) => boolean): string {
+  let base = parte;
+  while (base && !cabe(`${base}${RECORTE}`)) {
+    const ultimaPalabra = base.search(/\s+\S+$/);
+    base = ultimaPalabra > 0 ? base.slice(0, ultimaPalabra) : Array.from(base).slice(0, -1).join("");
+  }
+  return `${base}${RECORTE}`;
 }
 
 /** El límite de texto del canal, dicho para el operador. */

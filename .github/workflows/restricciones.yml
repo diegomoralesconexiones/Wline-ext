@@ -1,0 +1,56 @@
+name: Restricciones
+
+# Los chequeos de CONSTRAINTS.md propios del fork. Viven aparte de ci.yml (que
+# es de Kevin y trae typecheck, lint, test y build) para que *Sync fork* no
+# choque. Lo que se hace cumplir y desde cuándo lo dice CONSTRAINTS.md; aquí
+# solo se corre.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  piso:
+    name: piso · floor-guard
+    runs-on: ubuntu-latest
+    steps:
+      # Historia completa: la guardia compara contra el merge base.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node scripts/floor-guard.mjs --base "origin/${{ github.base_ref || 'main' }}"
+
+  cobertura:
+    name: cobertura · trinquete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm vitest run --coverage
+      - run: node scripts/coverage-check.mjs --base "origin/${{ github.base_ref || 'main' }}"
+
+  seguridad:
+    name: seguridad · secretos y dependencias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Las imágenes de gitleaks y osv-scanner están fijadas en el script.
+      - run: node scripts/check-security.mjs --base "origin/${{ github.base_ref || 'main' }}"

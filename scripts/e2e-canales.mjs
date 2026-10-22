@@ -248,6 +248,7 @@ async function main() {
   await elWebhook();
   const secreto = await laFirma();
   if (secreto) {
+    await elEnvio(secreto);
     await autocuracion(secreto);
     await pantallaDeEstado(secreto);
   }
@@ -290,6 +291,83 @@ async function enReposo(S) {
     }
   } finally {
     await sql.end();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 031 — Lo que se guarda al enviar, y Zernio caído al enviar
+// ---------------------------------------------------------------------------
+
+/** El id de plataforma del último saliente de la conversación, leído de la base. */
+async function idGuardado(conversationId) {
+  if (!process.env.DATABASE_URL) return null;
+  const sql = postgres(process.env.DATABASE_URL, { max: 1, onnotice: () => {} });
+  try {
+    const [f] = await sql`
+      select wa_message_id from message
+      where conversation_id = ${conversationId} and direction = 'out'
+      order by created_at desc limit 1`;
+    return f?.wa_message_id ?? null;
+  } finally {
+    await sql.end();
+  }
+}
+
+/**
+ * AC7: un envío por Zernio guarda el `data.messageId` que respondió Zernio,
+ * no un `zernio_<hora>` inventado. El simulador numera sus ids
+ * (`zmock_<hora>_<n>`) y anota el `n` de cada envío, así que se sabe cuál dio.
+ * AC15: con Zernio caído al enviar, el operador lee que el canal no está
+ * disponible y nada se cuelga.
+ */
+async function elEnvio(S) {
+  console.log("\n== 031: el id que se guarda al enviar, y Zernio caído ==");
+  ok("DATABASE_URL para leer el id guardado", Boolean(process.env.DATABASE_URL));
+  for (const [red, canal, cuentaId] of [
+    ["ig", "Instagram", IG],
+    ["fb", "Messenger", FB],
+  ]) {
+    const sender = `env-${red}-${RUN}`;
+    const nombre = `Cliente envío ${red} ${MARCA}`;
+    const hilo = `zconv-${red}-${sender}`;
+    const e = evento(red, { cuentaId, sender, nombre, text: `hola ${MARCA}` });
+    ok(`${canal}: entra el mensaje del cliente → 200`, (await entregar(e, { secreto: S })) === 200);
+    const conv = await convDe(nombre);
+    if (!conv) {
+      ok(`${canal}: la conversación se abrió`, false);
+      continue;
+    }
+
+    const enviar = () =>
+      api(`/api/conversations/${conv.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ text: `respuesta a mano ${MARCA}` }),
+      });
+    const r = await enviar();
+    ok(`${canal}: el operador responde → 200`, r.res.ok, `${r.res.status} ${JSON.stringify(r.json)}`);
+    const salio = ((await api("/api/dev/zernio-mock/_sent")).json?.sent ?? [])
+      .filter((m) => m.conversationId === hilo)
+      .at(-1);
+    const guardado = await idGuardado(conv.id);
+    ok(
+      `${canal}: se guarda el id que respondió Zernio (data.messageId), no uno inventado`,
+      Boolean(salio) && new RegExp(`^zmock_[0-9a-z]+_${salio.n}$`).test(guardado ?? ""),
+      `guardado=${guardado} n=${salio?.n}`
+    );
+
+    await tirar([`inbox/conversations/${hilo}/messages`]);
+    const desde = Date.now();
+    const caido = await enviar();
+    const tardo = Date.now() - desde;
+    await tirar([]);
+    ok(
+      `${canal}: con Zernio caído al enviar → 503 «${canal} no está disponible», sin colgarse`,
+      caido.res.status === 503 &&
+        caido.json?.error?.code === "meta_unavailable" &&
+        caido.json?.error?.message?.includes(`${canal} no está disponible`) &&
+        tardo < 10_000,
+      `${caido.res.status} ${JSON.stringify(caido.json)} en ${tardo} ms`
+    );
   }
 }
 
@@ -563,6 +641,14 @@ async function laFirma() {
   const e2 = evento("ig", { cuentaId: IG, sender: `igs-${RUN}`, nombre: nombreIg, text: "no debe entrar" });
   ok("con la firma rota → 401", (await entregar(e2, { firma: "deadbeef" })) === 401);
   ok("sin firma → 401", (await entregar(e2, { firma: null })) === 401);
+  // 031 · AC16: lo rechazado no entra a la bandeja.
+  await sleep(1000);
+  const hiloIg = (await api(`/api/conversations/${convIg?.id}/messages`)).json?.messages ?? [];
+  ok(
+    "y lo rechazado no entra al hilo",
+    hiloIg.length > 0 && !hiloIg.some((m) => m.text === "no debe entrar"),
+    JSON.stringify(hiloIg.map((m) => m.text))
+  );
 
   // Un webhook, una URL, un secreto: Messenger llega por la URL de Instagram.
   const nombreFb = `Cliente FB ${MARCA}`;

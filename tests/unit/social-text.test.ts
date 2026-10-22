@@ -95,4 +95,17 @@ describe("024 · texto de la IA sin formato para redes", () => {
       expect(plainSocialText(una)).toBe(una);
     }
   });
+
+  // 031 · D8: sendText vuelve a limpiar cada parte de una respuesta larga, así
+  // que limpiar lo ya limpio no puede cambiar nada.
+  it("es idempotente con negritas, listas, enlaces y emojis juntos", () => {
+    for (const texto of [
+      "¡Hola! 👋 *Bienvenido* a la **tienda**\n\n- *Martillo* de _bola_ 🔨\n+ ~Clavos~ agotados\n* [catálogo](https://tienda.mx/cat_2026)",
+      "**_Oferta_** 🎉: [https://x.mx/a_b](https://x.mx/a_b) y `código` 😀😀",
+      "1. Primero\n2. *Segundo* ✅\n\n## Horario\nde _9 a 6_ 🕘",
+    ]) {
+      const una = plainSocialText(texto);
+      expect(plainSocialText(una)).toBe(una);
+    }
+  });
 });

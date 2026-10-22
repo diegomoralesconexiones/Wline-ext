@@ -141,9 +141,10 @@ export async function POST(req: Request, ctx: Ctx) {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const state = zernioMockState();
     const id = nextZernioMessageId();
+    const conversationId = decodeURIComponent(path[2]!);
     state.sent.push({
       n: state.seq,
-      conversationId: decodeURIComponent(path[2]!),
+      conversationId,
       accountId: body.accountId ? String(body.accountId) : null,
       message: String(body.message ?? ""),
       ...(body.messagingType ? { messagingType: String(body.messagingType) } : {}),
@@ -151,7 +152,9 @@ export async function POST(req: Request, ctx: Ctx) {
       idempotencyKey: req.headers.get("idempotency-key"),
       at: new Date().toISOString(),
     });
-    return Response.json({ message: { id } });
+    // 031 · D3: la forma exacta de la API real. Con la vieja (`message.id`)
+    // las pruebas no veían que Instagram leía una respuesta que ya no existe.
+    return Response.json({ success: true, data: { messageId: id, conversationId } });
   }
 
   return Response.json({});
