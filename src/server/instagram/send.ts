@@ -1,5 +1,6 @@
 import { MetaApiError } from "@/lib/meta/client";
 import type { InstagramCredentials } from "@/server/instagram/credentials";
+import { sendZernioMessage } from "@/server/zernio";
 
 /**
  * 014 — Frontera de salida del canal de Instagram (Constitución II: todo
@@ -9,7 +10,6 @@ import type { InstagramCredentials } from "@/server/instagram/credentials";
  * (graph.instagram.com). Ambos devuelven el id del mensaje en la plataforma.
  */
 
-const ZERNIO_BASE = process.env.ZERNIO_BASE_URL ?? "https://zernio.com/api/v1";
 const IG_GRAPH_BASE =
   process.env.IG_GRAPH_BASE_URL ?? "https://graph.instagram.com";
 const IG_GRAPH_VERSION = process.env.META_GRAPH_API_VERSION ?? "v25.0";
@@ -38,51 +38,19 @@ export async function sendInstagramText(input: {
   /** Fuera de la ventana de 24 h Instagram solo admite HUMAN_AGENT. */
   humanAgentTag?: boolean;
 }): Promise<InstagramSendResult> {
-  return input.credentials.source === "zernio"
-    ? sendViaZernio(input)
-    : sendViaMeta(input);
-}
-
-async function sendViaZernio(input: {
-  credentials: InstagramCredentials;
-  recipient: string;
-  threadRef: string | null;
-  text: string;
-  humanAgentTag?: boolean;
-}): Promise<InstagramSendResult> {
-  const { credentials, threadRef } = input;
-  if (!threadRef) {
-    throw new MetaApiError(
-      "La conversacion no tiene referencia de hilo en Zernio",
-      { status: 400 }
-    );
+  // 031: un solo transporte de Zernio para todos los canales. La copia que
+  // vivía aquí leía una respuesta que la API ya no da y guardaba un id
+  // inventado en cada envío.
+  if (input.credentials.source === "zernio") {
+    return sendZernioMessage({
+      token: input.credentials.token,
+      accountId: input.credentials.accountRef,
+      conversationId: input.threadRef,
+      text: input.text,
+      humanAgentTag: input.humanAgentTag,
+    });
   }
-  const body: Record<string, unknown> = {
-    accountId: credentials.accountRef,
-    message: input.text,
-  };
-  if (input.humanAgentTag) {
-    body.messagingType = "MESSAGE_TAG";
-    body.messageTag = "HUMAN_AGENT";
-  }
-
-  const res = await fetchJson(
-    `${ZERNIO_BASE}/inbox/conversations/${encodeURIComponent(threadRef)}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${credentials.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    }
-  );
-
-  const id =
-    (res as { message?: { id?: string }; id?: string }).message?.id ??
-    (res as { id?: string }).id ??
-    `zernio_${Date.now()}`;
-  return { platformMessageId: String(id) };
+  return sendViaMeta(input);
 }
 
 async function sendViaMeta(input: {
