@@ -321,3 +321,82 @@ describe("el tope de mensajes del canal no traspasa (022)", () => {
     expect(eventos).toContain("handoff:ventana");
   });
 });
+
+/**
+ * 031 · D8 — Una respuesta del agente que no cabe en el canal sale en partes
+ * que sí caben, en orden. Antes el envío fallaba y el agente se quedaba
+ * callado.
+ */
+describe("la respuesta larga sale en partes (031)", () => {
+  // Tres párrafos de ~840 bytes: no caben juntos en un DM de Instagram.
+  const LARGA = [1, 2, 3]
+    .map((p) =>
+      Array.from({ length: 25 }, (_, i) => `Párrafo ${p}, frase ${i + 1}: sí envío.`).join(" ")
+    )
+    .join("\n\n");
+  const enviados = () => sendText.mock.calls.map(([input]) => (input as { text: string }).text);
+  const palabras = (textos: string[]) => textos.join(" ").split(/\s+/).filter(Boolean);
+
+  beforeEach(() => {
+    eventos.length = 0;
+    selectQueue.length = 0;
+    inserts.length = 0;
+    updates.length = 0;
+    sendText.mockReset();
+    sendText.mockImplementation(async (input: { text: string }) => {
+      eventos.push(`enviado:${input.text}`);
+      return { messageId: "msg_out" };
+    });
+    chatJson.mockReset();
+    chatJson.mockResolvedValue({ ok: true, data: { action: "reply", text: LARGA } });
+    vi.stubEnv("OPENROUTER_API_TOKEN", "token-test");
+  });
+
+  const turnoEn = (extra: Record<string, unknown>) =>
+    selectQueue.push([conversacion(extra)], [perfil], historial("cuéntame todo"), [], []);
+
+  it("en Instagram: varias partes de 1.000 bytes o menos, en orden, con todo el texto", async () => {
+    expect(Buffer.byteLength(LARGA)).toBeGreaterThan(2000);
+    turnoEn({ channel: "instagram" });
+    await runAgentTurn("cv_1");
+
+    const partes = enviados();
+    expect(partes).toHaveLength(3);
+    expect(partes.every((p) => Buffer.byteLength(p) <= 1000)).toBe(true);
+    expect(palabras(partes)).toEqual(palabras([LARGA]));
+    expect(sendText.mock.calls.every(([input]) => (input as { aiGenerated?: boolean }).aiGenerated)).toBe(true);
+  });
+
+  it("una respuesta que cabe sale en un solo mensaje, como hoy", async () => {
+    chatJson.mockResolvedValue({ ok: true, data: { action: "reply", text: "Claro, con gusto" } });
+    turnoEn({ channel: "instagram" });
+    await runAgentTurn("cv_1");
+    expect(enviados()).toEqual(["Claro, con gusto"]);
+  });
+
+  it("en el Laboratorio se guardan las mismas partes y no se toca ninguna API", async () => {
+    turnoEn({ channel: "instagram", isTest: true });
+    await runAgentTurn("cv_1");
+
+    expect(sendText).not.toHaveBeenCalled();
+    expect(graphRequest).not.toHaveBeenCalled();
+    const guardadas = inserts.filter((v) => v.direction === "out").map((v) => String(v.text));
+    expect(guardadas).toHaveLength(3);
+    expect(guardadas.every((p) => Buffer.byteLength(p) <= 1000)).toBe(true);
+    expect(palabras(guardadas)).toEqual(palabras([LARGA]));
+  });
+
+  it("si la ventana se cierra a media respuesta, se traspasa y no salen las partes que faltan", async () => {
+    sendText.mockImplementationOnce(async (input: { text: string }) => {
+      eventos.push(`enviado:${input.text}`);
+      return { messageId: "msg_out" };
+    });
+    sendText.mockRejectedValueOnce(new SendError("window_closed", "cerrada"));
+    turnoEn({ channel: "instagram" });
+    await runAgentTurn("cv_1");
+
+    expect(sendText).toHaveBeenCalledTimes(2);
+    expect(eventos.filter((e) => e.startsWith("enviado:"))).toHaveLength(1);
+    expect(eventos.at(-1)).toBe("handoff:ventana");
+  });
+});

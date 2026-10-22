@@ -490,7 +490,67 @@ async function agenteIncluido() {
   );
   const salio = (await enviadosPorZernio(e.hilo)).at(-1);
   ok("y así llegó a Instagram", salio?.message === respuesta.text && !salio.messageTag, JSON.stringify(salio));
+  // 031 · AC19: lo que cabe sale en un solo mensaje, como siempre.
+  ok("en un solo mensaje, porque cabe (AC19)", (await enviadosPorZernio(e.hilo)).length === 1);
+  await respuestaLarga();
   await agente(false);
+}
+
+// ---------------------------------------------------------------------------
+// 031 · D8 — Una respuesta larga del agente llega en partes
+// ---------------------------------------------------------------------------
+
+const palabras = (t) => t.split(/\s+/).filter(Boolean);
+
+/** Lo que contesta el simulador de IA cuando el cliente pide «respuesta larga». */
+async function textoLargoDelSimulador() {
+  const r = await api("/api/dev/ai-mock/v1/chat/completions", {
+    method: "POST",
+    body: JSON.stringify({ messages: [{ role: "user", content: "respuesta larga" }] }),
+  });
+  return JSON.parse(r.json?.choices?.[0]?.message?.content ?? "{}").text ?? "";
+}
+
+async function respuestaLarga() {
+  console.log("\n== 031: una respuesta larga del agente llega a Instagram en partes ==");
+  const esperado = await textoLargoDelSimulador();
+  ok(
+    "(preparación) el simulador da una respuesta de más de 2.000 bytes",
+    Buffer.byteLength(esperado) > 2000,
+    String(Buffer.byteLength(esperado))
+  );
+  const nombre = `Cliente ig larga ${MARCA}`;
+  const e = await entranteSocial("ig", {
+    sender: `ig-larga-${RUN}`,
+    nombre,
+    text: `dame una respuesta larga ${MARCA}`,
+  });
+  ok("el DM entra → 200", e.status === 200, String(e.status));
+  const total = palabras(esperado).length;
+  const partes =
+    (await hasta(async () => {
+      const s = await enviadosPorZernio(e.hilo);
+      return palabras(s.map((m) => m.message).join(" ")).length >= total ? s : null;
+    }, COALESCE + 20000)) ?? (await enviadosPorZernio(e.hilo));
+  const textos = partes.map((m) => m.message);
+  ok("el agente no se calla: llega en 3 o más mensajes (AC17)", textos.length >= 3, `${textos.length} partes`);
+  ok(
+    "cada uno de 1.000 bytes o menos",
+    textos.length > 0 && textos.every((t) => Buffer.byteLength(t) <= 1000),
+    JSON.stringify(textos.map((t) => Buffer.byteLength(t)))
+  );
+  ok(
+    "en orden y, juntos, con el texto completo, sin partir palabras",
+    JSON.stringify(palabras(textos.join(" "))) === JSON.stringify(palabras(esperado)),
+    JSON.stringify(textos.map((t) => t.slice(0, 30)))
+  );
+  const conv = await convDe(nombre);
+  const guardados = (await mensajesDe(conv.id)).filter((m) => m.direction === "out" && m.aiGenerated);
+  ok(
+    "y en el hilo quedan las mismas partes, marcadas como IA",
+    JSON.stringify(guardados.map((m) => m.text)) === JSON.stringify(textos),
+    `${guardados.length} guardadas`
+  );
 }
 
 main().catch((err) => {
