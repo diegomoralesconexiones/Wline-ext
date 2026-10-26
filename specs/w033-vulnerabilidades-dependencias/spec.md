@@ -49,7 +49,7 @@ sin excepciones y sin tocar CONSTRAINTS.md.
 | overrides en `pnpm-workspace.yaml` (postcss, sharp, zod 4 de better-auth, nanoid 3, source-map-js, browserslist, brace-expansion 1 y 5, js-yaml 4) | b | 24 de 32 junto con next |
 | vitest `^4.1.12`, @vitest/coverage-v8 `4.1.12`, vite `^7.3.7` explícito | a | vitest, vite, tinypool |
 | drizzle-orm `^0.45.4`, drizzle-kit `^0.31.11` | a | drizzle-orm, shell-quote |
-| zod `^4.6.7` | a | zod 3 |
+| zod `^4.6.6` | a | zod 3 |
 
 Por qué no (c): `check-security.mjs` no lee la tabla de excepciones (habría
 que enseñarle), `floor-guard` marca la fila nueva a propósito, y el riesgo de
@@ -68,6 +68,14 @@ tipos en 5 archivos y nada más.
 3. `node scripts/check-security.mjs dependencias` debe seguir sin nada alto.
 4. Cuando el lockfile de Kevin ya traiga la versión de un override, esa línea
    sobra y se borra.
+
+Un override también reescribe la dependencia directa del mismo nombre (zod,
+postcss). Si `package.json` pide otro rango, `pnpm install` en local no se
+queja, pero `--frozen-lockfile` en CI y en Docker falla con «specifiers in the
+lockfile don't match». Por eso zod va en `^4.6.6`, igual que su override. Para
+comprobarlo como en CI: copiar `package.json`, `pnpm-lock.yaml`,
+`pnpm-workspace.yaml` y `.npmrc` a una carpeta vacía y correr
+`pnpm install --frozen-lockfile --ignore-scripts`.
 
 Si Kevin todavía usa zod 3 en código nuevo, `pnpm typecheck` lo marca
 (típicamente `z.record` de un argumento).
