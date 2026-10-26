@@ -1,6 +1,6 @@
 # Constraints
 
-Last reviewed: 2026-10-21 por @diegomoralesconexiones (acordado con
+Last reviewed: 2026-10-26 por @diegomoralesconexiones (acordado con
 `constraint-driven-development`).
 
 El piso de calidad de este repositorio, con números y con el comando que da
@@ -23,6 +23,27 @@ Lo revisa `node scripts/floor-guard.mjs` sobre el diff contra `origin/main`.
 
 La fecha da dos semanas de aviso para ajustar falsos positivos sin parar el
 trabajo. Mover la fecha más tarde también lo detecta la guardia.
+
+### Versiones de Kevin
+
+Decidido el 2026-10-26 por @diegomoralesconexiones, al traer la 2.5.1.
+
+Si la rama trae una versión de Kevin que `main` no tiene, el piso juzga contra
+esa versión y no contra `main`. Es la misma idea que la fila de secretos: el
+código de Kevin no es de este cambio, y medirlo como propio da violaciones que
+el fork no puede arreglar sin divergir. Así, en una actualización, cuenta solo
+lo propio del fork, incluidas la resolución de conflictos y cualquier cambio
+que se haga encima.
+
+- Una versión de Kevin es una etiqueta `vX.Y.Z` de
+  `https://github.com/kevinrivm/vocero-crm`, leída de ahí con `git ls-remote`,
+  con el mismo commit. Una etiqueta local o puesta a mano no cuenta.
+- Si la rama trae varias, manda la más nueva.
+- Si el repositorio de Kevin no contesta, se juzga contra `main`, que es lo
+  más estricto.
+- Lo aplican `floor-guard`, `coverage-check` (líneas nuevas) y
+  `check-security` (rango de secretos), con `scripts/lib/base-del-piso.mjs`.
+  Cada uno imprime contra qué base juzgó.
 
 ## Con número (se hace cumplir)
 

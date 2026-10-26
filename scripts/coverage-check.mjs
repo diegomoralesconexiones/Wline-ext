@@ -14,6 +14,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { baseDelPiso } from "./lib/base-del-piso.mjs";
 
 const base = (() => {
   const i = process.argv.indexOf("--base");
@@ -42,8 +43,10 @@ console.log(`coverage-check: líneas ${hoy}% (registrado ${registrado}%, toleran
 // Líneas nuevas: las añadidas en src/ según el diff, cruzadas con lcov.
 const diff = (() => {
   try {
-    const mb = execFileSync("git", ["merge-base", base, "HEAD"], { encoding: "utf8" }).trim();
-    return execFileSync("git", ["diff", "--unified=0", mb, "--", "src"], { encoding: "utf8", maxBuffer: 1 << 28 });
+    // Con una versión de Kevin en la rama, sus líneas no son «nuevas» del fork.
+    const desde = baseDelPiso(base);
+    if (!desde) return null;
+    return execFileSync("git", ["diff", "--unified=0", desde.commit, "--", "src"], { encoding: "utf8", maxBuffer: 1 << 28 });
   } catch {
     return null; // sin merge base no hay líneas nuevas que medir; el total sí cuenta
   }

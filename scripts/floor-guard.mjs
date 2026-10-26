@@ -15,6 +15,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { baseDelPiso } from "./lib/base-del-piso.mjs";
 
 const base = (() => {
   const i = process.argv.indexOf("--base");
@@ -40,8 +41,12 @@ const top = git(["rev-parse", "--show-toplevel"])?.trim();
 if (!top) bail("no estoy dentro de un repositorio git");
 process.chdir(top);
 
-const mergeBase = git(["merge-base", base, "HEAD"])?.trim();
-if (!mergeBase) bail("no hay merge base contra " + base);
+// Si la rama trae una versión de Kevin, se juzga contra ella (CONSTRAINTS.md,
+// «Versiones de Kevin»).
+const desde = baseDelPiso(base);
+if (!desde) bail("no hay merge base contra " + base);
+const mergeBase = desde.commit;
+console.log(`floor-guard: base ${mergeBase.slice(0, 7)} (${desde.motivo})`);
 
 // Rutas que la guardia no mira (una por línea, con * y **). Una excepción
 // legítima queda como archivo versionado, no como regla aflojada.

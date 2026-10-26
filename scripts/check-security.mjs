@@ -13,6 +13,7 @@
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { baseDelPiso } from "./lib/base-del-piso.mjs";
 
 const GITLEAKS = "ghcr.io/gitleaks/gitleaks:v8.30.1";
 const OSV = "ghcr.io/google/osv-scanner:v2.0.0";
@@ -46,15 +47,14 @@ const hallazgo = (msg) => {
 };
 
 if (corre("secretos")) {
-  // Solo los commits de esta rama: el historial heredado no es de este cambio.
-  let rango;
-  try {
-    const mb = execFileSync("git", ["merge-base", base, "HEAD"], { encoding: "utf8" }).trim();
-    rango = `${mb}..HEAD`;
-  } catch {
+  // Solo los commits de esta rama: el historial heredado no es de este cambio,
+  // tampoco el de una versión de Kevin que la rama traiga.
+  const desde = baseDelPiso(base);
+  if (!desde) {
     console.error("check-security: no hay merge base contra " + base);
     process.exit(2);
   }
+  const rango = `${desde.commit}..HEAD`;
   const r = docker([
     "run", "--rm", "-v", `${repo}:/repo`, "--entrypoint", "sh", GITLEAKS, "-c",
     `git config --global --add safe.directory /repo && gitleaks git /repo --redact --no-banner --log-opts="${rango}" --report-format json --report-path /tmp/r.json >/dev/null 2>&1; echo "EXIT=$?"; cat /tmp/r.json 2>/dev/null`,
