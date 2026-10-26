@@ -8,6 +8,7 @@ import { getDb, schema } from "@/lib/db";
 import { apiError, parseBody } from "@/lib/api";
 import { requireBotKey, resolveInstanceOrg } from "@/server/bot/auth";
 import { SendError, sendText } from "@/server/inbox/send";
+import { guardarRespuestaDePrueba } from "@/server/lab/sandbox";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,10 @@ const bodySchema = z.object({
  * de aquí. Usa el mismo camino que el composer de la bandeja (`sendText`), así
  * que el mensaje queda en el hilo marcado como IA, respeta la ventana de 24 h
  * y hereda el guard de sandbox del Laboratorio.
+ *
+ * 033 — En una conversación de prueba del Laboratorio (`is_test`) la
+ * respuesta se GUARDA en el hilo y no se envía: es como un cerebro externo
+ * contesta una corrida. Antes respondía 409 `sandbox_violation`.
  *
  * 409 tipados: ai_paused (un humano tomó la conversación) · window_closed ·
  * sandbox_violation · message_limit (022: el canal no admite más mensajes
@@ -48,6 +53,7 @@ export async function POST(req: Request) {
     .select({
       aiEnabled: schema.conversation.aiEnabled,
       handoffAt: schema.conversation.handoffAt,
+      isTest: schema.conversation.isTest,
     })
     .from(schema.conversation)
     .where(
@@ -61,6 +67,14 @@ export async function POST(req: Request) {
   if (!conv) return apiError(404, "not_found", "Conversación no encontrada");
   if (!conv.aiEnabled || conv.handoffAt) {
     return apiError(409, "ai_paused", "La IA está en pausa en esta conversación");
+  }
+  if (conv.isTest) {
+    const guardada = await guardarRespuestaDePrueba({
+      organizationId,
+      conversationId: body.data.conversationId,
+      text: body.data.text,
+    });
+    return Response.json({ messageId: guardada.messageId, status: "sent" });
   }
 
   try {

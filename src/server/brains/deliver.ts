@@ -45,6 +45,8 @@ function columnasDelMensaje() {
     waMediaId: schema.mediaAsset.waMediaId,
     mimeType: schema.mediaAsset.mimeType,
     caption: schema.mediaAsset.caption,
+    fileName: schema.mediaAsset.fileName,
+    payload: schema.mediaAsset.payload,
     assetId: schema.mediaAsset.id,
   };
 }
@@ -57,6 +59,8 @@ function paraEvento(m: {
   waMediaId: string | null;
   mimeType: string | null;
   caption: string | null;
+  fileName: string | null;
+  payload: unknown;
   assetId: string | null;
 }): MensajeParaEvento {
   return {
@@ -65,7 +69,13 @@ function paraEvento(m: {
     type: m.type,
     text: m.text,
     media: m.assetId
-      ? { waMediaId: m.waMediaId, mimeType: m.mimeType, caption: m.caption }
+      ? {
+          waMediaId: m.waMediaId,
+          mimeType: m.mimeType,
+          caption: m.caption,
+          fileName: m.fileName,
+          payload: m.payload,
+        }
       : null,
   };
 }
@@ -250,6 +260,7 @@ export async function construirEvento(
         conv.lastInboundAt,
         windowMsFor(conv.channel)
       ),
+      test: conv.isTest,
     },
     contact: {
       id: contact.id,

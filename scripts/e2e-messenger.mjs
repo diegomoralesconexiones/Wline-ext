@@ -390,66 +390,8 @@ async function main() {
   const outZ = (msgsZ2.json?.messages ?? []).find((m) => m.direction === "out");
   ok("el saliente queda como 'sent'", outZ?.status === "sent", outZ?.status);
 
-  await respuestaLarga();
-
   console.log(`\n===== ${checks - failures}/${checks} checks OK, ${failures} fallos =====`);
   process.exit(failures ? 1 : 0);
-}
-
-/**
- * 031 · D8 — Una respuesta del agente que no cabe en un mensaje de Messenger
- * (2.000 bytes) llega en partes que sí caben, en vez de quedarse callado.
- */
-async function respuestaLarga() {
-  console.log("\n== 031: una respuesta larga del agente llega a Messenger en partes ==");
-  const palabras = (t) => t.split(/\s+/).filter(Boolean);
-  const r = await api("/api/dev/ai-mock/v1/chat/completions", {
-    method: "POST",
-    body: JSON.stringify({ messages: [{ role: "user", content: "respuesta larga" }] }),
-  });
-  const esperado = JSON.parse(r.json?.choices?.[0]?.message?.content ?? "{}").text ?? "";
-  ok(
-    "(preparación) el simulador da una respuesta de más de 2.000 bytes",
-    Buffer.byteLength(esperado) > 2000,
-    String(Buffer.byteLength(esperado))
-  );
-
-  const antes = (await api("/api/agent/profile")).json?.profile?.enabled;
-  ok("agente incluido encendido", (await api("/api/agent/profile", { method: "PUT", body: JSON.stringify({ enabled: true }) })).res.ok);
-  const hilo = `zconv-larga-${RUN}`;
-  const evt = zernioEvent({
-    message: {
-      id: `zmsg-larga-${RUN}`,
-      conversationId: hilo,
-      text: `quiero una respuesta larga ${MARCA}`,
-      sender: { id: `psid-larga-${RUN}`, name: `Cliente larga ${MARCA}`, username: null },
-    },
-  });
-  ok("el mensaje entra → 200", (await webhook(evt, { signature: sign(evt) })).status === 200);
-
-  const enviados = async () =>
-    ((await fetch(`${BASE}/api/dev/zernio-mock/_sent`).then((x) => x.json())).sent ?? []).filter(
-      (m) => m.conversationId === hilo
-    );
-  let partes = [];
-  for (let i = 0; i < 100; i++) {
-    partes = (await enviados()).map((m) => m.message);
-    if (palabras(partes.join(" ")).length >= palabras(esperado).length) break;
-    await sleep(250);
-  }
-  await api("/api/agent/profile", { method: "PUT", body: JSON.stringify({ enabled: antes === true }) });
-
-  ok("el agente no se calla: llega en 2 o más mensajes (AC18)", partes.length >= 2, `${partes.length} partes`);
-  ok(
-    "cada uno de 2.000 bytes o menos",
-    partes.length > 0 && partes.every((t) => Buffer.byteLength(t) <= 2000),
-    JSON.stringify(partes.map((t) => Buffer.byteLength(t)))
-  );
-  ok(
-    "en orden y, juntos, con el texto completo, sin partir palabras",
-    JSON.stringify(palabras(partes.join(" "))) === JSON.stringify(palabras(esperado)),
-    JSON.stringify(partes.map((t) => t.slice(0, 30)))
-  );
 }
 
 main().catch((err) => {

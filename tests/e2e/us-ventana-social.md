@@ -44,11 +44,11 @@ node --env-file=.env scripts/e2e-ventana-social.mjs
 8. TikTok a las 30 horas: `humanWindow: null`, su ventana de 48 horas sigue
    abierta y la IA contesta. WhatsApp: `humanWindow: null`.
 
-## El agente incluido
+## El agente incluido (ya no aplica)
 
-9. Con el agente encendido, un cliente escribe por Instagram con asteriscos.
-   El simulador de IA repite lo que dijo: la respuesta del agente llega a
-   Instagram sin las marcas, y sin etiqueta.
+9. 036 — El CRM no trae agente: todo texto de IA llega por
+   `/api/bot/messages` y pasa por el mismo `sendText` del paso 1. No hay un
+   segundo camino que probar.
 
 ## Interfaz (a mano, claro y oscuro)
 

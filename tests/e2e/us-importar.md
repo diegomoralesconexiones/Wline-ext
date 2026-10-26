@@ -3,11 +3,14 @@
 Arnés: `scripts/e2e-importar.mjs`. Spec:
 [`specs/027-importar-contactos/spec.md`](../../specs/027-importar-contactos/spec.md).
 
-Precondición: app corriendo (`next dev`) sobre una base migrada, **sin**
-`BRAIN_DISPATCH_URL` (contesta el agente incluido), con simuladores
-(`WA_MOCK_ENABLED=true`, `META_GRAPH_BASE_URL` → wa-mock, `OPENROUTER_BASE_URL`
-→ ai-mock con `OPENROUTER_API_TOKEN` y `OPENROUTER_MODEL`) y
-`AGENT_COALESCE_MS=1500`.
+Precondición: app corriendo (`next dev`) sobre una base migrada, con
+simuladores (`WA_MOCK_ENABLED=true`, `META_GRAPH_BASE_URL` → wa-mock,
+`OPENROUTER_BASE_URL` → ai-mock con `OPENROUTER_API_TOKEN` y
+`OPENROUTER_MODEL`), `BOT_API_KEY`, `AGENT_COALESCE_MS=1500` y
+`BRAIN_DISPATCH_URL` hacia un cerebro que contesta (el del arnés de
+`us-despacho.md`), con el interruptor del Agente encendido. 036 — el CRM no
+trae agente: «el agente contesta» es «el CRM le despacha al cerebro y el
+cerebro contesta»; «no le contesta» es «no se le despacha».
 
 El arnés importa por la misma ruta que usa el diálogo (`POST
 /api/contacts/import`), hace escribir a los importados por WhatsApp y mira qué
@@ -38,13 +41,14 @@ node --env-file=.env scripts/e2e-importar.mjs
    conversación quedó con la IA en pausa.
 6. El importado escribe: su conversación nace con la IA en pausa, cae en su
    misma ficha, conserva el nombre del archivo (no el de su perfil de
-   WhatsApp) y queda sin leer. El agente no le contesta, ni a quien ya existía.
+   WhatsApp) y queda sin leer. No se le despacha al cerebro, ni a quien ya
+   existía.
 7. El renglón sin nombre entró con el teléfono como nombre, y toma el de
    WhatsApp en cuanto escribe.
-8. A un desconocido el agente sí le contesta.
+8. Un desconocido sí se despacha y el cerebro le contesta.
 9. `PATCH /api/contacts/{id}` con `aiPaused: false` → el contacto deja de
-   estar «sin agente», su conversación vuelve a tener IA y al siguiente
-   mensaje el agente contesta. Editar otra cosa del contacto no toca la pausa.
+   estar «sin agente», su conversación vuelve a tener IA y su siguiente
+   mensaje se despacha. Editar otra cosa del contacto no toca la pausa.
 
 ## Lo que no se importa
 

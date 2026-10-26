@@ -183,7 +183,11 @@ async function procesar(fila: FilaDespacho): Promise<void> {
     await descartarDespacho(fila, "la conversación ya no existe");
     return;
   }
-  if (!conv.aiEnabled || conv.handoffAt || conv.isTest) {
+  // 033 — Una conversación de prueba SÍ se despacha: la ingesta nunca encola
+  // una (`despacharAlCerebro`), así que si hay un despacho suyo lo encoló el
+  // Laboratorio. Su respuesta vuelve por `/api/bot/messages`, que la guarda
+  // sin enviarla.
+  if (!conv.aiEnabled || conv.handoffAt) {
     await descartarDespacho(fila, "la IA se pausó antes de despachar");
     return;
   }

@@ -50,6 +50,7 @@ describe("features: las banderas de despliegue", () => {
       agenda: false,
       channels: ["whatsapp"],
       atribucion: false,
+      media: "disco",
     });
   });
 
@@ -65,6 +66,7 @@ describe("features: las banderas de despliegue", () => {
       agenda: true,
       channels: ["whatsapp", "instagram", "messenger"],
       atribucion: true,
+      media: "disco",
     });
   });
 
@@ -73,7 +75,7 @@ describe("features: las banderas de despliegue", () => {
     // `true` y la agenda respondiera 404, el health mentiría.
     expect(
       healthFeatures({ AGENDA: "onn", CHANNELS: "telegram", ATRIBUCION: "off" })
-    ).toEqual({ agenda: false, channels: ["whatsapp"], atribucion: false });
+    ).toEqual({ agenda: false, channels: ["whatsapp"], atribucion: false, media: "disco" });
   });
 });
 
@@ -139,10 +141,13 @@ describe("GET /api/health", () => {
     const cuerpo = await res.json();
     expect(cuerpo).toMatchObject({
       ok: true,
-      features: { agenda: true, channels: ["whatsapp", "instagram"], atribucion: false },
+      features: { agenda: true, channels: ["whatsapp", "instagram"], atribucion: false, media: "disco" },
       mediaWritable: true,
     });
     expect(typeof cuerpo.version).toBe("string");
+    // 047 — Los eventos de webhook sin entrar. Con la base de mentira no hay
+    // tabla que contar: la llave sale en null y `ok` no se mueve.
+    expect(cuerpo).toHaveProperty("webhooks", null);
     // Los campos de antes siguen delante: quien ya lee `ok` y `version` no
     // nota el cambio.
     expect(Object.keys(cuerpo).slice(0, 2)).toEqual(["ok", "version"]);

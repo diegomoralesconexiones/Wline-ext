@@ -1,17 +1,20 @@
 /**
  * Self-test E2E de comportamiento — 026: eliminar una conversación.
  *
- * Conduce la app real con los simuladores de canal y hace de CEREBRO: levanta
- * un servidor HTTP en `BRAIN_DISPATCH_URL`, en este proceso, para recibir el
- * aviso `conversation.deleted` y verificar su firma sobre el cuerpo crudo,
- * como debe hacerlo un cerebro de verdad.
+ * Conduce la app real con los simuladores de canal y hace de CEREBRO con el
+ * cerebro falso compartido (`scripts/lib/cerebro-falso.mjs`): un servidor HTTP
+ * en `BRAIN_DISPATCH_URL`, en este proceso, que recibe los turnos y el aviso
+ * `conversation.deleted` y verifica su firma sobre el cuerpo crudo, como debe
+ * hacerlo un cerebro de verdad. Aquí no contesta (`responder: "ninguna"`):
+ * se prueba el borrado, no quién responde. 036: para que haya turnos, el
+ * interruptor del Agente se enciende (con el cerebro sano) y se apaga al final.
  *
- * Uso:
- *   1) app corriendo (`next dev`) sobre una base migrada, con
+ * Uso (configuración estándar de la 036, ver `scripts/lib/cerebro-falso.mjs`):
+ *   1) app corriendo (`pnpm dev`) sobre una base migrada, con
  *      WA_MOCK_ENABLED=true, META_GRAPH_BASE_URL → wa-mock, BOT_API_KEY y
- *      BRAIN_DISPATCH_URL=http://127.0.0.1:<puerto libre>/vocero/dispatch.
+ *      BRAIN_DISPATCH_URL=http://127.0.0.1:3261/vocero/dispatch.
  *      Con AGENDA=on corre además la cita por venir (AC6).
- *   2) node --env-file=.env scripts/e2e-eliminar.mjs
+ *   2) node --env-file=.env.e2e-036 scripts/e2e-eliminar.mjs
  *
  * Dos modos, según cómo arrancó la app:
  *   - con BRAIN_DISPATCH_URL: todo, incluido el aviso al cerebro;
@@ -20,10 +23,9 @@
  *
  * Sale con código 1 si algún check falla. Guion: tests/e2e/us-eliminar.md.
  */
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
-import { createServer } from "node:http";
 import path from "node:path";
+import { apagarAgente, encenderAgente, levantarCerebroFalso } from "./lib/cerebro-falso.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const BOT_KEY = process.env.BOT_API_KEY ?? "";
@@ -85,72 +87,6 @@ async function hasta(cond, ms = 15000, paso = 250) {
     if (Date.now() > fin) return null;
     await sleep(paso);
   }
-}
-
-// ---------------------------------------------------------------------------
-// El cerebro de prueba
-// ---------------------------------------------------------------------------
-
-function firmaOk(crudo, cabecera) {
-  if (typeof cabecera !== "string" || !cabecera.startsWith("sha256=")) return false;
-  const esperada = Buffer.from(`sha256=${createHmac("sha256", BOT_KEY).update(crudo).digest("hex")}`);
-  const recibida = Buffer.from(cabecera);
-  return esperada.length === recibida.length && timingSafeEqual(esperada, recibida);
-}
-
-async function levantarCerebro(url) {
-  const estado = { modo: "ok", recibidos: [] };
-  const server = createServer((req, res) => {
-    if (req.method !== "POST" || (req.url ?? "").split("?")[0] !== url.pathname) {
-      res.writeHead(404);
-      return res.end();
-    }
-    const trozos = [];
-    req.on("data", (c) => trozos.push(c));
-    req.on("end", () => {
-      const crudo = Buffer.concat(trozos);
-      let evento = null;
-      try {
-        evento = JSON.parse(crudo.toString("utf8"));
-      } catch {}
-      estado.recibidos.push({
-        crudo: crudo.toString("utf8"),
-        evento,
-        firmaOk: firmaOk(crudo, req.headers["x-vocero-signature"]),
-        cabeceras: {
-          dispatch: req.headers["x-vocero-dispatch-id"] ?? null,
-          org: req.headers["x-vocero-organization"] ?? null,
-          evento: req.headers["x-vocero-event"] ?? null,
-        },
-      });
-      const status = estado.modo === "500" ? 500 : 200;
-      res.writeHead(status, { "content-type": "application/json" });
-      res.end(JSON.stringify({ status }));
-    });
-  });
-  const escuchar = () =>
-    new Promise((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(Number(url.port || 80), url.hostname.replace(/^\[|\]$/g, ""), resolve);
-    });
-  await escuchar();
-  return {
-    estado,
-    /** Los avisos de olvido de esa conversación. */
-    olvidos: (convId) =>
-      estado.recibidos.filter(
-        (r) => r.evento?.type === "conversation.deleted" && r.evento?.conversation?.id === convId
-      ),
-    /** Los turnos (despachos) de esa conversación. */
-    turnos: (convId) =>
-      estado.recibidos.filter((r) => !r.evento?.type && r.evento?.conversation?.id === convId),
-    apagar: () =>
-      new Promise((resolve) => {
-        server.closeAllConnections();
-        server.close(() => resolve());
-      }),
-    encender: escuchar,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +173,9 @@ async function main() {
     process.exit(1);
   }
   console.log(`== Setup (${conCerebro ? "con cerebro por despacho" : "sin despacho"}${AGENDA ? ", agenda encendida" : ""}) ==`);
-  const cerebro = conCerebro ? await levantarCerebro(new URL(DISPATCH)) : null;
+  const cerebro = conCerebro
+    ? await levantarCerebroFalso({ base: BASE, botKey: BOT_KEY, url: new URL(DISPATCH), responder: "ninguna" })
+    : null;
 
   const email = "e2e@vocero.test";
   const password = "password-e2e-123";
@@ -254,8 +192,14 @@ async function main() {
     body: JSON.stringify({ wabaId: "WABA-E2E", phoneNumberId: PN, token: "tok-e2e" }),
   });
   ok("conexión de WhatsApp guardada (wa-mock)", conn.res.ok, JSON.stringify(conn.json));
-  // El agente incluido, apagado: aquí no se prueba quién contesta.
-  await api("/api/agent/profile", { method: "PUT", body: JSON.stringify({ enabled: false }) });
+  // 036: con despacho, el interruptor encendido (con el cerebro sano) para que
+  // haya turnos; el cerebro no contesta. Sin despacho, apagado.
+  if (cerebro) {
+    const on = await encenderAgente(api);
+    ok("(con despacho) interruptor del Agente encendido", on.res.ok, `${on.res.status} ${JSON.stringify(on.json)}`);
+  } else {
+    await apagarAgente(api);
+  }
 
   try {
     await permisos();
@@ -264,6 +208,7 @@ async function main() {
     if (cerebro) await cerebroCaido(cerebro);
     await citaPorVenir();
   } finally {
+    await apagarAgente(api).catch(() => {});
     if (cerebro) await cerebro.apagar().catch(() => {});
   }
 
