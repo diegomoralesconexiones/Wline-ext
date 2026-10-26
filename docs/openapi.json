@@ -29,10 +29,10 @@
     "/api/bot/messages": {
       "post": {
         "summary": "Contestarle al cliente",
-        "description": "Sale por el mismo camino que la bandeja y queda marcado como IA. El CRM adapta el texto al canal (en Instagram, Messenger y TikTok le quita el formato). En una conversación de prueba del Laboratorio (`conversation.test` del despacho) la respuesta se GUARDA en el hilo y no se envía.",
+        "description": "Sale por el mismo camino que la bandeja y queda marcado como IA. El CRM adapta el texto al canal (en Instagram, Messenger y TikTok le quita el formato). En una conversación de prueba del Laboratorio (`conversation.test` del despacho) la respuesta se GUARDA en el hilo y no se envía. Wline: un texto que no cabe en el canal (1.000 bytes en Instagram, 2.000 en Messenger, 4.096 caracteres en WhatsApp) sale en varios mensajes que sí caben, en orden, hasta 5; si una parte falla, las que faltan no se mandan y se responde el error de esa parte.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["conversationId", "text"], "properties": { "conversationId": { "type": "string" }, "text": { "type": "string", "minLength": 1 } } } } } },
         "responses": {
-          "200": { "description": "Enviado (o guardado, en una de prueba)", "content": { "application/json": { "schema": { "type": "object", "properties": { "messageId": { "type": "string" }, "status": { "type": "string", "enum": ["sent"] } }, "required": ["messageId"] } } } },
+          "200": { "description": "Enviado (o guardado, en una de prueba)", "content": { "application/json": { "schema": { "type": "object", "properties": { "messageId": { "type": "string", "description": "El de la primera parte." }, "messageIds": { "type": "array", "items": { "type": "string" }, "description": "Wline: todas las partes, en orden. Una sola si el texto cabía." }, "status": { "type": "string", "enum": ["sent"] } }, "required": ["messageId"] } } } },
           "404": { "$ref": "#/components/responses/NoEncontrada" },
           "409": { "description": "`ai_paused`: una persona tomó la conversación (no insistas). `window_closed`: la ventana del canal cerró. `message_limit`: el canal no admite más hasta que el cliente escriba (TikTok). `sandbox_violation`: reservado. `no_org`.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "422": { "$ref": "#/components/responses/Invalido" },

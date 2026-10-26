@@ -25,7 +25,12 @@
  * Sale con código 1 si algún check falla. Guion: tests/e2e/us-ventana-social.md.
  */
 import { createHmac } from "node:crypto";
-import { apagarAgente, encenderAgente, levantarCerebroFalso } from "./lib/cerebro-falso.mjs";
+import {
+  apagarAgente,
+  encenderAgente,
+  levantarCerebroFalso,
+  RESPUESTA_LARGA,
+} from "./lib/cerebro-falso.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN ?? "";
@@ -476,6 +481,7 @@ async function agenteContesta() {
     const on = await encenderAgente(api);
     ok("agente encendido (contesta el cerebro falso)", on.res.ok, `${on.res.status} ${JSON.stringify(on.json)}`);
     await respuestaPlana(cerebro);
+    await respuestaLarga(cerebro);
   } finally {
     await apagarAgente(api);
     await cerebro.esperar();
@@ -511,6 +517,66 @@ async function respuestaPlana(cerebro) {
     "el cerebro la mandó con las marcas: el CRM es quien las quita",
     pedido?.status === 200 && /\*martillo\*/.test(pedido?.texto ?? ""),
     JSON.stringify(pedido?.texto)
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 031 · D8 — Una respuesta larga del cerebro llega en partes
+// ---------------------------------------------------------------------------
+
+const palabras = (t) => t.split(/\s+/).filter(Boolean);
+
+async function respuestaLarga(cerebro) {
+  console.log("\n== 031: una respuesta larga del cerebro llega a Instagram en partes ==");
+  // Lo manda el cerebro falso tal cual cuando el cliente pide «respuesta larga».
+  const esperado = RESPUESTA_LARGA;
+  ok(
+    "(preparación) la respuesta del cerebro pasa de 2.000 bytes",
+    Buffer.byteLength(esperado) > 2000,
+    String(Buffer.byteLength(esperado))
+  );
+  const nombre = `Cliente ig larga ${MARCA}`;
+  const e = await entranteSocial("ig", {
+    sender: `ig-larga-${RUN}`,
+    nombre,
+    text: `dame una respuesta larga ${MARCA}`,
+  });
+  ok("el DM entra → 200", e.status === 200, String(e.status));
+  const total = palabras(esperado).length;
+  const partes =
+    (await hasta(async () => {
+      const s = await enviadosPorZernio(e.hilo);
+      return palabras(s.map((m) => m.message).join(" ")).length >= total ? s : null;
+    }, COALESCE + 20000)) ?? (await enviadosPorZernio(e.hilo));
+  const textos = partes.map((m) => m.message);
+  ok("el agente no se calla: llega en 3 o más mensajes (AC17)", textos.length >= 3, `${textos.length} partes`);
+  ok(
+    "cada uno de 1.000 bytes o menos",
+    textos.length > 0 && textos.every((t) => Buffer.byteLength(t) <= 1000),
+    JSON.stringify(textos.map((t) => Buffer.byteLength(t)))
+  );
+  ok(
+    "en orden y, juntos, con el texto completo, sin partir palabras",
+    JSON.stringify(palabras(textos.join(" "))) === JSON.stringify(palabras(esperado)),
+    JSON.stringify(textos.map((t) => t.slice(0, 30)))
+  );
+  const conv = await convDe(nombre);
+  const guardados = (await mensajesDe(conv.id)).filter((m) => m.direction === "out" && m.aiGenerated);
+  ok(
+    "y en el hilo quedan las mismas partes, marcadas como IA",
+    JSON.stringify(guardados.map((m) => m.text)) === JSON.stringify(textos),
+    `${guardados.length} guardadas`
+  );
+  // Lo que contestó el CRM queda anotado al volver la llamada, ya con todo enviado.
+  await cerebro.esperar();
+  const pedido = cerebro.respuestasDe(conv.id).find((r) => r.ruta === "/api/bot/messages");
+  ok(
+    "el cerebro mandó el texto entero en una llamada y el CRM respondió 200 con un id por parte",
+    pedido?.status === 200 &&
+      pedido.texto === esperado &&
+      JSON.stringify(pedido.json?.messageIds) === JSON.stringify(guardados.map((m) => m.id)) &&
+      pedido.json?.messageId === guardados[0]?.id,
+    JSON.stringify({ status: pedido?.status, ids: pedido?.json?.messageIds })
   );
 }
 

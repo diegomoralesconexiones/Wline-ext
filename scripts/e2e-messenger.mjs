@@ -8,12 +8,20 @@
  *
  * Uso:
  *   1) app corriendo con WA_MOCK_ENABLED=true, META_GRAPH_BASE_URL → wa-mock,
- *      ZERNIO_BASE_URL → zernio-mock, CHANNELS con messenger, y BD migrada
- *   2) node --env-file=.env scripts/e2e-messenger.mjs
+ *      ZERNIO_BASE_URL → zernio-mock, CHANNELS con messenger, y BD migrada;
+ *      para la última parte (031 · D8), además BOT_API_KEY y
+ *      BRAIN_DISPATCH_URL de la configuración estándar de la 036
+ *   2) node --env-file=.env.e2e-036 scripts/e2e-messenger.mjs
  *
  * Sale con código 1 si algún check falla.
  */
 import { createHmac } from "node:crypto";
+import {
+  apagarAgente,
+  encenderAgente,
+  levantarCerebroFalso,
+  RESPUESTA_LARGA,
+} from "./lib/cerebro-falso.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN;
@@ -390,8 +398,74 @@ async function main() {
   const outZ = (msgsZ2.json?.messages ?? []).find((m) => m.direction === "out");
   ok("el saliente queda como 'sent'", outZ?.status === "sent", outZ?.status);
 
+  await respuestaLarga();
+
   console.log(`\n===== ${checks - failures}/${checks} checks OK, ${failures} fallos =====`);
   process.exit(failures ? 1 : 0);
+}
+
+/**
+ * 031 · D8 — Una respuesta del cerebro que no cabe en un mensaje de Messenger
+ * (2.000 bytes) llega en partes que sí caben, en vez de rechazarse.
+ *
+ * Desde la 2.0 contesta el cerebro falso por el despacho: esta parte necesita
+ * BOT_API_KEY y BRAIN_DISPATCH_URL (configuración estándar de la 036, ver
+ * `scripts/lib/cerebro-falso.mjs`).
+ */
+async function respuestaLarga() {
+  console.log("\n== 031: una respuesta larga del cerebro llega a Messenger en partes ==");
+  const palabras = (t) => t.split(/\s+/).filter(Boolean);
+  // Lo manda el cerebro falso tal cual cuando el cliente pide «respuesta larga».
+  const esperado = RESPUESTA_LARGA;
+  ok(
+    "(preparación) la respuesta del cerebro pasa de 2.000 bytes",
+    Buffer.byteLength(esperado) > 2000,
+    String(Buffer.byteLength(esperado))
+  );
+
+  const cerebro = await levantarCerebroFalso({ base: BASE, botKey: process.env.BOT_API_KEY ?? "" });
+  const hilo = `zconv-larga-${RUN}`;
+  let partes = [];
+  try {
+    const on = await encenderAgente(api);
+    ok("agente encendido (contesta el cerebro falso)", on.res.ok, `${on.res.status} ${JSON.stringify(on.json)}`);
+    const evt = zernioEvent({
+      message: {
+        id: `zmsg-larga-${RUN}`,
+        conversationId: hilo,
+        text: `quiero una respuesta larga ${MARCA}`,
+        sender: { id: `psid-larga-${RUN}`, name: `Cliente larga ${MARCA}`, username: null },
+      },
+    });
+    ok("el mensaje entra → 200", (await webhook(evt, { signature: sign(evt) })).status === 200);
+
+    const enviados = async () =>
+      ((await fetch(`${BASE}/api/dev/zernio-mock/_sent`).then((x) => x.json())).sent ?? []).filter(
+        (m) => m.conversationId === hilo
+      );
+    for (let i = 0; i < 120; i++) {
+      partes = (await enviados()).map((m) => m.message);
+      if (palabras(partes.join(" ")).length >= palabras(esperado).length) break;
+      await sleep(250);
+    }
+  } finally {
+    // Apagado al terminar, como deja el interruptor todo guion de la 036.
+    await apagarAgente(api);
+    await cerebro.esperar();
+    await cerebro.apagar();
+  }
+
+  ok("el agente no se calla: llega en 2 o más mensajes (AC18)", partes.length >= 2, `${partes.length} partes`);
+  ok(
+    "cada uno de 2.000 bytes o menos",
+    partes.length > 0 && partes.every((t) => Buffer.byteLength(t) <= 2000),
+    JSON.stringify(partes.map((t) => Buffer.byteLength(t)))
+  );
+  ok(
+    "en orden y, juntos, con el texto completo, sin partir palabras",
+    JSON.stringify(palabras(partes.join(" "))) === JSON.stringify(palabras(esperado)),
+    JSON.stringify(partes.map((t) => t.slice(0, 30)))
+  );
 }
 
 main().catch((err) => {
