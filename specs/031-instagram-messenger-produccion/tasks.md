@@ -200,13 +200,13 @@ en una sola.
   - AC16: una entrega con firma inválida responde 401.
   - Si algún guion no los cubre ya, se agrega la afirmación en `scripts/e2e-canales.mjs`.
 - [x] T023 [P] `graphify update .` para refrescar el grafo (`graphify-out/`, no se versiona).
-- [ ] T039 Capturas de la app real **antes del PR** (va antes de T024; el ID es posterior porque se agregó después).
+- [x] T039 Capturas de la app real **antes del PR** (va antes de T024; el ID es posterior porque se agregó después).
   - Con la app viva en local, los mocks y `CHANNELS=whatsapp,instagram,messenger`, sembrar conversaciones de Instagram y Messenger con los guiones E2E.
   - Con Playwright, como hace `scripts/e2e-responsive.mjs`, tomar capturas de escritorio y de teléfono de cuatro vistas: la bandeja con los tres canales, una conversación de Instagram con una respuesta larga en partes, una de Messenger con el aviso «Solo puede contestar una persona», y Ajustes → Canales.
   - Guardarlas en `scratch/031/`, que git ignora.
   - El **Dueño** las compara con el [prototipo](https://claude.ai/artifact/AkcWoAELMLWf8RFXbwXDrC) y aprueba antes de seguir.
   - Requiere Postgres en local, por ejemplo con Docker Desktop encendido.
-- [ ] T024 Commits en `feat/031-instagram-messenger-produccion` y PR a `main` del fork `diegomoralesconexiones/Wline-ext`, con `ci.yml` y el build de `imagen.yml` en verde. **Preguntar antes**; el merge lo aprueba el **Dueño**.
+- [x] T024 Commits en `feat/031-instagram-messenger-produccion` y PR a `main` del fork `diegomoralesconexiones/Wline-ext`, con `ci.yml` y el build de `imagen.yml` en verde. **Preguntar antes**; el merge lo aprueba el **Dueño**.
 
 **Checkpoint**: `main` del fork tiene la 031 con la CI en verde.
 
@@ -220,22 +220,22 @@ Wline-ext; el agente contesta y un operador puede responder (AC9–AC14, D4–D6
 **Independent Test**: [quickstart.md](quickstart.md) §2–§4 completo, sin
 desviaciones.
 
-- [ ] T025 [US4] **Preguntar antes**. Crear y empujar `git tag v1.6.0-wline.1` sobre `main` del fork.
+- [x] T025 [US4] **Preguntar antes**. Crear y empujar `git tag v1.6.0-wline.1` sobre `main` del fork.
   - Verificar que el workflow *Imagen* (`.github/workflows/imagen.yml`) termina en verde y publica `ghcr.io/diegomoralesconexiones/wline-ext:1.6.0-wline.1`.
   - Si falla por la mayúscula del nombre, aplicar R7, que es un cambio de CI y se pregunta antes.
-- [ ] T026 [US4] **Dueño**: hacer público el paquete `wline-ext` (*Package settings* → *Change visibility* → *Public*, R8). Claude verifica que la etiqueta se puede leer sin credenciales.
-- [ ] T027 [US4] **Preguntar antes**. En Coolify, app Wline-ext (`esy1owctf4ga9booy475qjeb`):
+- [x] T026 [US4] **Dueño**: hacer público el paquete `wline-ext` (*Package settings* → *Change visibility* → *Public*, R8). Claude verifica que la etiqueta se puede leer sin credenciales.
+- [x] T027 [US4] **Preguntar antes**. En Coolify, app Wline-ext (`esy1owctf4ga9booy475qjeb`):
   - Imagen `ghcr.io/diegomoralesconexiones/wline-ext`, etiqueta `1.6.0-wline.1`.
   - Variable de ejecución `CHANNELS=whatsapp,instagram,messenger`.
   - Redesplegar.
   - Verificar con `curl -s https://wline-ext.morales-tec.xyz/api/health` el commit del tag, `commitVerified: true` y los tres canales (AC9).
-- [ ] T028 [US4] **Dueño**, con guía de Claude en el navegador: Ajustes → IA → «Probar conexión» y `/api/agent/brain-status`. Confirmar que contesta el agente del CRM y no un cerebro externo.
-- [ ] T029 [US4] **Dueño**: guardar la llave de Zernio en Ajustes → Instagram y Ajustes → Messenger. La llave nunca se escribe en el chat. Claude verifica en Ajustes → Canales las dos cuentas sanas y el webhook apuntando aquí con secreto, sin `sin_https`, `sin_conexiones` ni `zernio_unavailable` (AC10).
-- [ ] T030 [US4] **Preguntar antes**. El **Dueño** dispara el evento de prueba desde el panel de webhooks de Zernio (*Test webhook*). Claude verifica que llegó firmado y que Wline-ext respondió 200 (AC11).
-- [ ] T031 [US4] **Dueño**: DM real desde su Instagram personal a la cuenta del negocio. Claude verifica que entra a la bandeja en segundos y que el agente contesta. Después un operador responde a mano, y el dueño confirma en su teléfono que llegaron las dos respuestas (AC12).
-- [ ] T032 [US4] **Dueño**: mensaje real desde su Facebook personal a la página. Las mismas verificaciones, por Messenger (AC13).
-- [ ] T033 [US4] **Dueño**: un DM de Instagram que pida una respuesta larga. Llega en partes, sin silencio (AC17 en vivo).
-- [ ] T034 [US4] **Dueño**: un WhatsApp de ida y vuelta, sin cambios (AC14).
+- [x] T028 [US4] **Dueño**, con guía de Claude en el navegador: Ajustes → IA → «Probar conexión» y `/api/agent/brain-status`. Confirmar que contesta el agente del CRM y no un cerebro externo.
+- [x] T029 [US4] **Dueño**: guardar la llave de Zernio en Ajustes → Instagram y Ajustes → Messenger. La llave nunca se escribe en el chat. Claude verifica en Ajustes → Canales las dos cuentas sanas y el webhook apuntando aquí con secreto, sin `sin_https`, `sin_conexiones` ni `zernio_unavailable` (AC10).
+- [x] T030 [US4] **Preguntar antes**. El **Dueño** dispara el evento de prueba desde el panel de webhooks de Zernio (*Test webhook*). Claude verifica que llegó firmado y que Wline-ext respondió 200 (AC11).
+- [x] T031 [US4] **Dueño**: DM real desde su Instagram personal a la cuenta del negocio. Claude verifica que entra a la bandeja en segundos y que el agente contesta. Después un operador responde a mano, y el dueño confirma en su teléfono que llegaron las dos respuestas (AC12).
+- [x] T032 [US4] **Dueño**: mensaje real desde su Facebook personal a la página. Las mismas verificaciones, por Messenger (AC13).
+- [x] T033 [US4] **Dueño**: un DM de Instagram que pida una respuesta larga. Llega en partes, sin silencio (AC17 en vivo).
+- [x] T034 [US4] **Dueño**: un WhatsApp de ida y vuelta, sin cambios (AC14).
 - [ ] T035 [US4] Llenar la sección «Prueba en vivo» de `specs/031-instagram-messenger-produccion/spec.md`: fecha, commit, resultado de AC9–AC14 y AC17, y cualquier desviación.
 
 **Checkpoint**: Instagram y Messenger atendiendo en producción.
@@ -346,3 +346,10 @@ Revertir según [quickstart.md](quickstart.md#revertir): quitar redes de
 - *T023*: `graphify update .` reconstruyó el grafo (4.572 nodos). `sendInstagramText` ya llama a `sendZernioMessage` y `sendViaZernio` ya no existe.
 - *T039*: capturas en `scratch/031/capturas/` (escritorio 1440×900 y teléfono 390×844) sobre una base limpia `vocero_capturas` y `CHANNELS=whatsapp,instagram,messenger`: bandeja con los tres canales, respuesta larga de Instagram en 3 partes (590, 948 y 887 bytes), Messenger con «Solo puede contestar una persona» y Ajustes → Canales con las cuentas y el webhook activos. Guion: `scratch/031/capturas-031.mjs`. Falta la aprobación del dueño.
 - *Verificaciones por revisión de código (Principio VII)*: AC21 a mitad de una respuesta (T019), ahora también con prueba unitaria.
+- *Publicación (T024–T027)*, 2026-10-22, con el permiso del dueño («sube el PR y pon todo en producción»):
+  - Punto de regreso **antes de tocar nada**: etiqueta `respaldo-pre-031` → `22fbc7b` (el `main` anterior) y la configuración de Coolify copiada: imagen `ghcr.io/kevinrivm/vocero-crm:1.6.0`, sin `CHANNELS`, `/api/health` con `commit da32409` y `channels: ["whatsapp"]`.
+  - PR [#2](https://github.com/diegomoralesconexiones/Wline-ext/pull/2): cinco commits (piso de calidad, docs, D1+D3, D2, D8) y los 6 checks en verde. Fusionado con merge commit (`f2d8b77`). Las skills de terceros (`.claude/skills`), `docs/agent-skills.md` y `docs/meta-mcp/` quedaron fuera, sin commit.
+  - Antes de tocar producción, la imagen de la rama se construyó y arrancó en local como en Coolify: migró, `/api/health` con el commit y los tres canales, y los simuladores en 404.
+  - Tag `v1.6.0-wline.1` sobre `f2d8b77`: *Imagen* en verde, publica `ghcr.io/diegomoralesconexiones/wline-ext:1.6.0-wline.1` (sin `latest` ni `1.6`). R7 no hizo falta: el nombre salió en minúsculas.
+  - T026 sin acción del dueño: el paquete heredó la visibilidad pública del fork; el manifiesto se lee sin credenciales.
+  - Coolify: imagen y etiqueta nuevas, `CHANNELS=whatsapp,instagram,messenger` (Coolify la copió también al ámbito de preview, que está apagado) y redespliegue de 117 s. **AC9 en verde**: `commit f2d8b77`, `commitVerified: true`, `channels: ["whatsapp","instagram","messenger"]`; los simuladores responden 404 y los logs de arranque están limpios.
