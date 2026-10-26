@@ -148,6 +148,41 @@
       "when": 1791987903930,
       "tag": "0020_secreto_zernio_cifrado",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792517498460,
+      "tag": "0021_roles_como_datos",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792608627646,
+      "tag": "0022_responder_citando",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792758207285,
+      "tag": "0023_webhook_event",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792778191260,
+      "tag": "0024_quick_reply",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792779395979,
+      "tag": "0025_conversation_note",
+      "breakpoints": true
     }
   ]
 }

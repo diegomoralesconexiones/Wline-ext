@@ -1,7 +1,7 @@
 /**
  * 024 — El texto de la IA, sin formato, para los canales que no lo dibujan.
  *
- * El agente incluido y los cerebros externos escriben como si todo fuera
+ * Los cerebros (Nea u otro) escriben como si todo fuera
  * WhatsApp: `*negrita*`, `_cursiva_`, y a veces Markdown entero. WhatsApp lo
  * dibuja; Instagram, Messenger y TikTok enseñan los asteriscos tal cual. Aquí
  * se quitan las marcas y se deja el contenido.

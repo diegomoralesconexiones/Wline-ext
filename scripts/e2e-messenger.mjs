@@ -8,12 +8,20 @@
  *
  * Uso:
  *   1) app corriendo con WA_MOCK_ENABLED=true, META_GRAPH_BASE_URL → wa-mock,
- *      ZERNIO_BASE_URL → zernio-mock, CHANNELS con messenger, y BD migrada
- *   2) node --env-file=.env scripts/e2e-messenger.mjs
+ *      ZERNIO_BASE_URL → zernio-mock, CHANNELS con messenger, y BD migrada;
+ *      para la última parte (031 · D8), además BOT_API_KEY y
+ *      BRAIN_DISPATCH_URL de la configuración estándar de la 036
+ *   2) node --env-file=.env.e2e-036 scripts/e2e-messenger.mjs
  *
  * Sale con código 1 si algún check falla.
  */
 import { createHmac } from "node:crypto";
+import {
+  apagarAgente,
+  encenderAgente,
+  levantarCerebroFalso,
+  RESPUESTA_LARGA,
+} from "./lib/cerebro-falso.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN;
@@ -397,47 +405,55 @@ async function main() {
 }
 
 /**
- * 031 · D8 — Una respuesta del agente que no cabe en un mensaje de Messenger
- * (2.000 bytes) llega en partes que sí caben, en vez de quedarse callado.
+ * 031 · D8 — Una respuesta del cerebro que no cabe en un mensaje de Messenger
+ * (2.000 bytes) llega en partes que sí caben, en vez de rechazarse.
+ *
+ * Desde la 2.0 contesta el cerebro falso por el despacho: esta parte necesita
+ * BOT_API_KEY y BRAIN_DISPATCH_URL (configuración estándar de la 036, ver
+ * `scripts/lib/cerebro-falso.mjs`).
  */
 async function respuestaLarga() {
-  console.log("\n== 031: una respuesta larga del agente llega a Messenger en partes ==");
+  console.log("\n== 031: una respuesta larga del cerebro llega a Messenger en partes ==");
   const palabras = (t) => t.split(/\s+/).filter(Boolean);
-  const r = await api("/api/dev/ai-mock/v1/chat/completions", {
-    method: "POST",
-    body: JSON.stringify({ messages: [{ role: "user", content: "respuesta larga" }] }),
-  });
-  const esperado = JSON.parse(r.json?.choices?.[0]?.message?.content ?? "{}").text ?? "";
+  // Lo manda el cerebro falso tal cual cuando el cliente pide «respuesta larga».
+  const esperado = RESPUESTA_LARGA;
   ok(
-    "(preparación) el simulador da una respuesta de más de 2.000 bytes",
+    "(preparación) la respuesta del cerebro pasa de 2.000 bytes",
     Buffer.byteLength(esperado) > 2000,
     String(Buffer.byteLength(esperado))
   );
 
-  const antes = (await api("/api/agent/profile")).json?.profile?.enabled;
-  ok("agente incluido encendido", (await api("/api/agent/profile", { method: "PUT", body: JSON.stringify({ enabled: true }) })).res.ok);
+  const cerebro = await levantarCerebroFalso({ base: BASE, botKey: process.env.BOT_API_KEY ?? "" });
   const hilo = `zconv-larga-${RUN}`;
-  const evt = zernioEvent({
-    message: {
-      id: `zmsg-larga-${RUN}`,
-      conversationId: hilo,
-      text: `quiero una respuesta larga ${MARCA}`,
-      sender: { id: `psid-larga-${RUN}`, name: `Cliente larga ${MARCA}`, username: null },
-    },
-  });
-  ok("el mensaje entra → 200", (await webhook(evt, { signature: sign(evt) })).status === 200);
-
-  const enviados = async () =>
-    ((await fetch(`${BASE}/api/dev/zernio-mock/_sent`).then((x) => x.json())).sent ?? []).filter(
-      (m) => m.conversationId === hilo
-    );
   let partes = [];
-  for (let i = 0; i < 100; i++) {
-    partes = (await enviados()).map((m) => m.message);
-    if (palabras(partes.join(" ")).length >= palabras(esperado).length) break;
-    await sleep(250);
+  try {
+    const on = await encenderAgente(api);
+    ok("agente encendido (contesta el cerebro falso)", on.res.ok, `${on.res.status} ${JSON.stringify(on.json)}`);
+    const evt = zernioEvent({
+      message: {
+        id: `zmsg-larga-${RUN}`,
+        conversationId: hilo,
+        text: `quiero una respuesta larga ${MARCA}`,
+        sender: { id: `psid-larga-${RUN}`, name: `Cliente larga ${MARCA}`, username: null },
+      },
+    });
+    ok("el mensaje entra → 200", (await webhook(evt, { signature: sign(evt) })).status === 200);
+
+    const enviados = async () =>
+      ((await fetch(`${BASE}/api/dev/zernio-mock/_sent`).then((x) => x.json())).sent ?? []).filter(
+        (m) => m.conversationId === hilo
+      );
+    for (let i = 0; i < 120; i++) {
+      partes = (await enviados()).map((m) => m.message);
+      if (palabras(partes.join(" ")).length >= palabras(esperado).length) break;
+      await sleep(250);
+    }
+  } finally {
+    // Apagado al terminar, como deja el interruptor todo guion de la 036.
+    await apagarAgente(api);
+    await cerebro.esperar();
+    await cerebro.apagar();
   }
-  await api("/api/agent/profile", { method: "PUT", body: JSON.stringify({ enabled: antes === true }) });
 
   ok("el agente no se calla: llega en 2 o más mensajes (AC18)", partes.length >= 2, `${partes.length} partes`);
   ok(

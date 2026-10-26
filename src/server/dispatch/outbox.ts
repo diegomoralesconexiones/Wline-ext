@@ -65,10 +65,17 @@ export async function encolarDespacho(params: {
   conversationId: string;
   messageIds?: readonly string[];
   ahora?: Date;
+  /**
+   * 033 — Sin ventana de agrupado: lo usa el Laboratorio, que manda una línea
+   * del guion a la vez y no tiene a nadie más escribiendo detrás.
+   */
+  inmediato?: boolean;
 }): Promise<{ id: string; notBefore: Date }> {
   const db = getDb();
   const ahora = params.ahora ?? new Date();
-  const notBefore = new Date(ahora.getTime() + ventanaCoalesceMs());
+  const notBefore = new Date(
+    ahora.getTime() + (params.inmediato ? 0 : ventanaCoalesceMs())
+  );
   const messageIds = [...new Set(params.messageIds ?? [])];
   // Se concatena en SQL y no leyendo-y-escribiendo: dos mensajes que llegan a
   // la vez no pueden pisarse la lista el uno al otro.

@@ -1,5 +1,4 @@
 import { JUDGE_MARKER } from "@/server/ai/prompts";
-import { CABECERA_HUECOS } from "@/server/agenda/offers";
 
 /**
  * Proveedor LLM determinista para el self-test (contrato mocks.md).
@@ -121,87 +120,7 @@ export function aiMockCompletion(messages: InMessage[]): string {
     return JSON.stringify({ veredicto: "verde", hallazgos: [] });
   }
 
-  const text = lastUser.toLowerCase();
-
-  /**
-   * 015 — La agenda, ejercitando el camino REAL.
-   *
-   * El mock reserva copiando el `startUtc` del mapa de huecos, igual que tiene
-   * que hacer un modelo de verdad. Si ese mapa deja de llegar, aquí no hay de
-   * dónde sacar el instante y la reserva falla — que es exactamente el fallo
-   * que se vivió en producción (#50), en vez de un test que lo simula.
-   *
-   * Se buscan TODOS los mensajes `system`, no solo el primero: el mapa va al
-   * final, después del historial.
-   */
-  const huecos = messages
-    .filter((m) => m.role === "system" && m.content.includes(CABECERA_HUECOS))
-    .flatMap((m) => m.content.match(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g) ?? []);
-
-  /**
-   * Solo ofrece horarios si el prompt le ENSEÑÓ `offer_slots`, como un modelo
-   * real. Con la agenda apagada el prompt no la trae (ni el esquema del turno
-   * la acepta), y el mock la contestaba igual: la conversación acababa en
-   * "Error del proveedor de IA", algo que en producción no pasa (R11).
-   */
-  const agendaEnseñada = messages.some(
-    (m) => m.role === "system" && m.content.includes('"action":"offer_slots"')
-  );
-  const quiereCita = /cita|agendar|agenda|horario|reserv/.test(text);
-  if (agendaEnseñada && quiereCita && huecos.length === 0) {
-    return JSON.stringify({
-      action: "offer_slots",
-      reply: "Claro, tengo estos horarios:",
-    });
-  }
-  const eligeUno = /primero|segundo|ese|esa|confirmo|quiero|me sirve/.test(text);
-  if (huecos.length > 0 && eligeUno) {
-    return JSON.stringify({
-      action: "book_slot",
-      startUtc: huecos[0],
-      reply: "¡Listo! Te agendé.",
-    });
-  }
-
-  // Persona pide_humano (el regex de respaldo captura la frase canónica; esta
-  // rama cubre variantes que llegan al modelo).
-  if (text.includes("humano") || text.includes("asesor")) {
-    return JSON.stringify({ action: "handoff", reason: "cliente" });
-  }
-
-  // Intención de compra → mover a Interesado.
-  if (
-    text.includes("lo compro") ||
-    text.includes("quiero comprar") ||
-    text.includes("me lo llevo")
-  ) {
-    return JSON.stringify({
-      action: "move_stage",
-      stage: "Interesado",
-      reply: "¡Excelente! Te aparto el producto y un compañero te confirma el pago.",
-    });
-  }
-
-  // 031 — Una respuesta que no cabe en un mensaje del canal: es lo que deja ver
-  // al agente partirla en vez de quedarse callado.
-  if (text.includes("respuesta larga")) {
-    return JSON.stringify({ action: "reply", text: RESPUESTA_LARGA });
-  }
-
-  const eco = lastUser.slice(0, 80);
-  return JSON.stringify({
-    action: "reply",
-    text: `Respuesta de prueba sobre: ${eco}`,
-  });
+  // 036 — Lo demás es un cerebro pensando por `/api/bot/llm`: texto de eco,
+  // determinista. El agente que contestaba con acciones JSON ya no existe.
+  return `Respuesta de prueba sobre: ${lastUser.slice(0, 80)}`;
 }
-
-/**
- * 031 — Unos 2.500 bytes en tres párrafos, con acentos y un emoji: no cabe en
- * un DM de Instagram (1.000 bytes) ni de Messenger (2.000). El segundo párrafo
- * solo ya pasa de 1.000, así que en Instagram también se corta por frases.
- */
-const RESPUESTA_LARGA = [
-  "¡Claro que sí! Te cuento todo sobre envíos, garantías y formas de pago para que decidas con calma. Cada pedido sale de nuestra bodega en Guadalajara el mismo día si lo confirmas antes de las dos de la tarde. Recibirás el número de guía por este mismo chat en cuanto el paquete esté en camino, y podrás rastrearlo desde la página de la paquetería sin crear ninguna cuenta. Si vives en la zona metropolitana, también tenemos entrega local en motocicleta con un costo fijo de setenta pesos. Los envíos al resto del país tardan entre dos y cinco días hábiles, según la ciudad.",
-  "Sobre la garantía: todas las herramientas eléctricas tienen un año de garantía directa con el fabricante, y nosotros te ayudamos con el trámite de principio a fin. Si una pieza llega dañada, mándanos una foto en las primeras cuarenta y ocho horas y te enviamos el reemplazo sin costo. Las herramientas manuales, como martillos, desarmadores y llaves, tienen garantía de por vida contra defectos de fabricación. Para hacerla válida solo necesitas tu ticket o el número de pedido, que también aparece en el correo de confirmación. No cubre el desgaste normal por uso ni los daños por usar la herramienta en algo para lo que no fue diseñada. Si tienes dudas sobre cuál elegir para tu proyecto, cuéntame qué vas a hacer y te recomiendo la opción que mejor te convenga según tu presupuesto. También manejamos refacciones para las marcas más comunes, así que una herramienta que ya tienes puede seguir trabajando muchos años más. Y si la falla aparece después de los primeros meses, revisamos la herramienta en nuestro taller antes de mandarla con el fabricante, para que no te quedes sin ella más tiempo del necesario. El diagnóstico es gratuito.",
-  "Puedes pagar con tarjeta de crédito o débito, transferencia bancaria o en efectivo en tiendas de conveniencia. Con tarjeta de crédito tenemos meses sin intereses en compras mayores a dos mil pesos. Si necesitas factura, compárteme tu constancia de situación fiscal y la emitimos el mismo día del pago. Si prefieres pasar a recoger tu pedido, la bodega abre de lunes a sábado de nueve de la mañana a seis de la tarde, y te avisamos por aquí en cuanto esté listo. Guardamos los pedidos hasta quince días sin costo adicional, y si algo no te convence al recibirlo, tienes treinta días para devolverlo en su empaque original. ¡Gracias por escribirnos! 🔧",
-].join("\n\n");

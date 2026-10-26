@@ -7,17 +7,30 @@
  * contesta como cerebro (`/api/bot/messages`) y como persona (la bandeja), y
  * comprueba lo que salió hacia cada plataforma y lo que quedó en el hilo.
  *
- * Uso:
- *   1) app corriendo (`next dev`) sobre una base migrada, SIN
- *      BRAIN_DISPATCH_URL, con CHANNELS=whatsapp,instagram,messenger,tiktok,
- *      WA_MOCK_ENABLED=true, META_GRAPH_BASE_URL → wa-mock, ZERNIO_BASE_URL →
- *      zernio-mock, OPENROUTER_BASE_URL → ai-mock con OPENROUTER_API_TOKEN y
- *      OPENROUTER_MODEL, BOT_API_KEY y AGENT_COALESCE_MS corta (1500).
- *   2) node --env-file=.env scripts/e2e-ventana-social.mjs
+ * 036 — La última parte ya no enciende un agente incluido: contesta el
+ * cerebro falso (`scripts/lib/cerebro-falso.mjs`) por el despacho, pensando
+ * por `/api/bot/llm`. La primera parte corre con el interruptor apagado: con
+ * el despacho configurado, así no se despacha nada y solo sale lo que manda
+ * el guion.
+ *
+ * Uso (configuración estándar de la 036, ver `scripts/lib/cerebro-falso.mjs`):
+ *   1) app corriendo (`pnpm dev`) sobre una base migrada, con
+ *      BRAIN_DISPATCH_URL=http://127.0.0.1:3261/vocero/dispatch,
+ *      CHANNELS=whatsapp,instagram,messenger,tiktok, WA_MOCK_ENABLED=true,
+ *      META_GRAPH_BASE_URL → wa-mock, ZERNIO_BASE_URL → zernio-mock,
+ *      OPENROUTER_BASE_URL → ai-mock con OPENROUTER_API_TOKEN y
+ *      OPENROUTER_MODEL, BOT_API_KEY y AGENT_COALESCE_MS=1500.
+ *   2) node --env-file=.env.e2e-036 scripts/e2e-ventana-social.mjs
  *
  * Sale con código 1 si algún check falla. Guion: tests/e2e/us-ventana-social.md.
  */
 import { createHmac } from "node:crypto";
+import {
+  apagarAgente,
+  encenderAgente,
+  levantarCerebroFalso,
+  RESPUESTA_LARGA,
+} from "./lib/cerebro-falso.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN ?? "";
@@ -151,8 +164,6 @@ const comoCerebro = (conversationId, text) =>
   bot("/api/bot/messages", { method: "POST", body: JSON.stringify({ conversationId, text }) });
 const aMano = (conversationId, text) =>
   api(`/api/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ text }) });
-const agente = (enabled) =>
-  api("/api/agent/profile", { method: "PUT", body: JSON.stringify({ enabled }) });
 
 /** Abre una conversación social con un mensaje del cliente de hace `hace` ms. */
 async function conversacion(red, etiqueta, hace = 0) {
@@ -171,10 +182,6 @@ async function main() {
       console.error(`CHANNELS no incluye \`${c}\`: arranca la app con los tres canales sociales.`);
       process.exit(1);
     }
-  }
-  if ((process.env.BRAIN_DISPATCH_URL ?? "").trim()) {
-    console.error("La app tiene BRAIN_DISPATCH_URL: este guion necesita al agente incluido.");
-    process.exit(1);
   }
   if (!BOT_KEY) {
     console.error("Falta BOT_API_KEY: el guion contesta como cerebro por /api/bot/messages.");
@@ -223,12 +230,12 @@ async function main() {
   });
   ok("WhatsApp conectado (wa-mock)", wa.res.ok, JSON.stringify(wa.json));
   // Apagado mientras el guion hace de cerebro: así solo sale lo que él manda.
-  ok("agente incluido apagado para la primera parte", (await agente(false)).res.ok);
+  ok("interruptor del Agente apagado para la primera parte", (await apagarAgente(api)).res.ok);
 
   await textoPlano();
   await ventanaHumana();
   await horaQueNoRetrocede();
-  await agenteIncluido();
+  await agenteContesta();
 
   console.log(`\n${checks - failures}/${checks} checks en verde`);
   process.exit(failures > 0 ? 1 : 0);
@@ -464,22 +471,35 @@ async function horaQueNoRetrocede() {
 }
 
 // ---------------------------------------------------------------------------
-// El agente incluido también sale plano
+// El agente (el cerebro, por el despacho) también sale plano
 // ---------------------------------------------------------------------------
 
-async function agenteIncluido() {
-  console.log("\n== El agente incluido contesta plano en redes ==");
-  ok("agente incluido encendido", (await agente(true)).res.ok);
+async function agenteContesta() {
+  console.log("\n== El agente contesta plano en redes (cerebro por el despacho) ==");
+  const cerebro = await levantarCerebroFalso({ base: BASE, botKey: BOT_KEY });
+  try {
+    const on = await encenderAgente(api);
+    ok("agente encendido (contesta el cerebro falso)", on.res.ok, `${on.res.status} ${JSON.stringify(on.json)}`);
+    await respuestaPlana(cerebro);
+    await respuestaLarga(cerebro);
+  } finally {
+    await apagarAgente(api);
+    await cerebro.esperar();
+    await cerebro.apagar();
+  }
+}
+
+async function respuestaPlana(cerebro) {
   const sender = `ig-agente-${RUN}`;
   const nombre = `Cliente ig agente ${MARCA}`;
   // El simulador de IA repite lo que dijo el cliente: si el cliente manda
-  // asteriscos, la respuesta del agente los trae.
+  // asteriscos, lo que el cerebro piensa por /api/bot/llm los trae.
   const dicho = `quiero el *martillo* de **bola** ${MARCA}`;
   const e = await entranteSocial("ig", { sender, nombre, text: dicho });
   const conv = e.status === 200 ? await convDe(nombre) : null;
   const respuesta = await hasta(
     async () => (await mensajesDe(conv.id)).find((m) => m.direction === "out" && m.aiGenerated),
-    COALESCE + 15000
+    COALESCE + 30000
   );
   ok("el agente contestó", Boolean(respuesta), "sin respuesta del agente");
   if (!respuesta) return;
@@ -492,30 +512,26 @@ async function agenteIncluido() {
   ok("y así llegó a Instagram", salio?.message === respuesta.text && !salio.messageTag, JSON.stringify(salio));
   // 031 · AC19: lo que cabe sale en un solo mensaje, como siempre.
   ok("en un solo mensaje, porque cabe (AC19)", (await enviadosPorZernio(e.hilo)).length === 1);
-  await respuestaLarga();
-  await agente(false);
+  const pedido = cerebro.respuestasDe(conv.id).find((r) => r.ruta === "/api/bot/messages");
+  ok(
+    "el cerebro la mandó con las marcas: el CRM es quien las quita",
+    pedido?.status === 200 && /\*martillo\*/.test(pedido?.texto ?? ""),
+    JSON.stringify(pedido?.texto)
+  );
 }
 
 // ---------------------------------------------------------------------------
-// 031 · D8 — Una respuesta larga del agente llega en partes
+// 031 · D8 — Una respuesta larga del cerebro llega en partes
 // ---------------------------------------------------------------------------
 
 const palabras = (t) => t.split(/\s+/).filter(Boolean);
 
-/** Lo que contesta el simulador de IA cuando el cliente pide «respuesta larga». */
-async function textoLargoDelSimulador() {
-  const r = await api("/api/dev/ai-mock/v1/chat/completions", {
-    method: "POST",
-    body: JSON.stringify({ messages: [{ role: "user", content: "respuesta larga" }] }),
-  });
-  return JSON.parse(r.json?.choices?.[0]?.message?.content ?? "{}").text ?? "";
-}
-
-async function respuestaLarga() {
-  console.log("\n== 031: una respuesta larga del agente llega a Instagram en partes ==");
-  const esperado = await textoLargoDelSimulador();
+async function respuestaLarga(cerebro) {
+  console.log("\n== 031: una respuesta larga del cerebro llega a Instagram en partes ==");
+  // Lo manda el cerebro falso tal cual cuando el cliente pide «respuesta larga».
+  const esperado = RESPUESTA_LARGA;
   ok(
-    "(preparación) el simulador da una respuesta de más de 2.000 bytes",
+    "(preparación) la respuesta del cerebro pasa de 2.000 bytes",
     Buffer.byteLength(esperado) > 2000,
     String(Buffer.byteLength(esperado))
   );
@@ -550,6 +566,17 @@ async function respuestaLarga() {
     "y en el hilo quedan las mismas partes, marcadas como IA",
     JSON.stringify(guardados.map((m) => m.text)) === JSON.stringify(textos),
     `${guardados.length} guardadas`
+  );
+  // Lo que contestó el CRM queda anotado al volver la llamada, ya con todo enviado.
+  await cerebro.esperar();
+  const pedido = cerebro.respuestasDe(conv.id).find((r) => r.ruta === "/api/bot/messages");
+  ok(
+    "el cerebro mandó el texto entero en una llamada y el CRM respondió 200 con un id por parte",
+    pedido?.status === 200 &&
+      pedido.texto === esperado &&
+      JSON.stringify(pedido.json?.messageIds) === JSON.stringify(guardados.map((m) => m.id)) &&
+      pedido.json?.messageId === guardados[0]?.id,
+    JSON.stringify({ status: pedido?.status, ids: pedido?.json?.messageIds })
   );
 }
 

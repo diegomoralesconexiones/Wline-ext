@@ -5,6 +5,318 @@ sigue el SemVer del [README](README.md#versiones): una menor trae funciones
 nuevas y actualizar es redesplegar. Desde 1.4.0, cada tag `vX.Y.Z` publica la
 imagen `ghcr.io/kevinrivm/vocero-crm:X.Y.Z`.
 
+## 2.5.1 — 2026-10-25
+
+Un retoque de interfaz. Actualizar es redesplegar con la etiqueta `2.5.1`: no
+hay migraciones ni variables nuevas. Nea no cambia.
+
+### Nuevo
+
+- **Fondo del chat con dibujos** (063), al estilo de WhatsApp pero propios:
+  40 dibujos en línea, en un mosaico que se repite sin costuras.
+  - Van en todos los temas, también en el propio, con un tono suave para el
+    modo claro y otro para el oscuro. Alto contraste va sin dibujos.
+  - Los dibujos son el fondo de la tarjeta del chat: se quedan quietos al
+    desplazar los mensajes y el compositor no los tapa. La pantalla de
+    «Elige una conversación» también los lleva.
+
+### Arreglado
+
+- El brillo de fondo de la pantalla vacía de la Bandeja ya se ve en la
+  computadora.
+
+## 2.5.0 — 2026-10-24
+
+Un Vocero nuevo por fuera, y a gusto de cada quien. Actualizar es
+redesplegar con la etiqueta `2.5.0`: no hay migraciones ni variables nuevas.
+Nea no cambia.
+
+### Nuevo
+
+- **Diseño de tarjetas** (061): la app son tarjetas separadas, muy redondas,
+  sobre un fondo suave.
+  - En la computadora, un **riel de iconos** reemplaza al menú lateral. La
+    sección activa va rellena y la Bandeja muestra su número; abajo están la
+    campana, Ajustes y tu cuenta (tema, avisos, instalar app, cerrar sesión y
+    versión).
+  - El buscador va en su propia cápsula.
+  - El cliente escribe en **burbujas oscuras** y tus respuestas van en
+    pastillas claras.
+  - Escribes en una cápsula, con el **botón de enviar redondo** aparte.
+  - Letra nueva: Urbanist.
+- **Ajustes → Apariencia** (062):
+  - **8 temas**: Menta (por defecto), Noche, Vocero, Vocero oscuro, Papel,
+    Carbón, Medianoche y Alto contraste.
+  - Un **tema propio** de tres colores, que avisa si algo no se lee.
+  - **Letra**: Urbanist, Archivo, Inter o IBM Plex Sans.
+  - **Tamaño**: chico, normal o grande.
+  - **Densidad**: compacta, normal o espaciosa.
+  - Todo **se guarda solo para cada persona**, y el dueño o un administrador
+    puede **aplicarlo a todo el equipo**.
+  - El sol y la luna saltan a la pareja del tema (Menta ⇄ Noche).
+  - El acento de tu marca se queda en todos los temas.
+
+### Cambió
+
+- El tema claro de siempre ahora es **Menta** y el oscuro, **Noche**. El azul
+  de la 2.x sigue disponible como «Vocero» y «Vocero oscuro». Quien ya usaba
+  el oscuro con el botón de antes ve Noche.
+- En el celular, el menú se abre igual que antes, pero ya sin la barra azul
+  marino.
+
+## 2.4.0 — 2026-10-23
+
+Avisos aunque no estés mirando, una bandeja que no se queda callada cuando se
+cae la conexión, la historia del cliente en su chat y atajos de teclado.
+Actualizar es redesplegar con la etiqueta `2.4.0`: no hay migraciones ni
+variables nuevas. Nea no cambia.
+
+### Nuevo
+
+- **Avisos del sistema** (056):
+  - «Activar avisos» en el menú;
+  - cuando escribe un cliente y no estás mirando Vocero, sale una
+    notificación con su nombre y el mensaje, y al tocarla se abre esa
+    conversación;
+  - la campana los silencia igual que el sonido.
+
+  Sin push: con Vocero cerrado no llega nada. En Windows, Chrome necesita
+  tener activadas sus notificaciones en Configuración → Sistema →
+  Notificaciones.
+- **«Sin conexión»** (056):
+  - una banda avisa «Sin internet» o «Sin conexión en tiempo real», con
+    «Reintentar ahora»;
+  - el tiempo real se reconecta solo (también tras un redespliegue) y la
+    bandeja trae lo que llegó mientras tanto.
+- **Eventos en el hilo** (054): en su lugar por hora, «Entró al embudo en
+  Nuevo», «Pasó a Interesado · por Ana», «Pasó a Perdido · Le pareció caro» y
+  «La IA se pausó: el cliente pidió un humano».
+- **Atajos de teclado** (055):
+  - **Ctrl+K** (⌘K) para ir a una pantalla o a una conversación;
+  - **?** para la ayuda;
+  - en la Bandeja, **Alt+J / Alt+K** para la conversación siguiente o
+    anterior, **/** para el buscador, **Alt+R** para responder y **Alt+N**
+    para una nota interna.
+- La Bandeja abre una conversación con `/inbox?conversation=<id>`.
+
+### Cambió
+
+- El panel del contacto nombra también el traspaso por hostilidad.
+
+## 2.3.0 — 2026-10-23
+
+Reenviar cualquier mensaje y, en el celular, responder deslizando. Actualizar
+es redesplegar con la etiqueta `2.3.0`: no hay migraciones ni variables
+nuevas. Nea no cambia.
+
+### Nuevo
+
+- **Reenviar cualquier mensaje** (059), no solo imágenes:
+  - el texto sale como texto;
+  - imagen, video, documento y audio salen como archivo nuevo, y una nota de
+    voz sigue siendo nota de voz.
+
+  El cliente lo recibe como un mensaje nuevo: la Cloud API no permite la
+  marca «Reenviado». Endpoint: `POST /api/conversations/:id/messages/forward`.
+- **En el celular** (059):
+  - deslizar un mensaje hacia cualquier lado lo cita;
+  - mantenerlo presionado abre un menú con Responder, Reenviar y Copiar
+    texto.
+
+### Cambió
+
+- **En la computadora**, los iconos «Responder» y «Reenviar» aparecen al pasar
+  el ratón por el mensaje. Ya no está el botón «Reenviar imagen» dentro de la
+  burbuja.
+- **En el celular**, se quitó la flecha junto a cada burbuja, que se leía como
+  «reenviar».
+
+### Arreglado
+
+- En la 2.3.0-rc.1, la hora de envío se salía de la burbuja en audios,
+  documentos y ubicaciones.
+
+## 2.2.0 — 2026-10-23
+
+Lo que aprendimos de las mejores bandejas abiertas, hecho a la manera de
+Vocero. Actualizar es redesplegar con la etiqueta `2.2.0`: las tres
+migraciones nuevas (0023 a 0025) se aplican solas al arrancar y no hay
+variables nuevas. Nea no cambia.
+
+### Nuevo
+
+- **Webhook a prueba de fallos** (047). Cada aviso de Meta o de Zernio se
+  guarda antes de procesarlo; si algo falla, se reintenta solo (30 s, 2 min,
+  10 min, 1 h y 6 h). Lo que agota los intentos se ve en Ajustes → WhatsApp,
+  con un botón **Reintentar**, y `/api/health` cuenta los pendientes y los
+  agotados.
+- **Vocero en el celular** (048). Se instala como app desde el navegador (fila
+  «Instalar app» del menú), con su icono y abriendo en la Bandeja. Necesita
+  HTTPS.
+- **Respuestas rápidas con «/»** (049). Al teclear `/` en el compositor sale
+  un menú con las respuestas guardadas; se administran en Ajustes → Respuestas
+  rápidas.
+- **Notas internas** (050). El equipo deja notas en el hilo, intercaladas con
+  los mensajes y en otro color. El cliente nunca las ve y llegan en tiempo
+  real a quien tenga el chat abierto.
+- **Borrador por conversación** (051). Lo que dejas a medio escribir sigue
+  ahí al volver a ese chat, guardado en el navegador.
+- **Filtros de la Bandeja** (052). Las pestañas «Todas | No leídas» y un solo
+  botón **Filtrar** con la etapa, «Por vencer» (a la ventana del canal le
+  quedan 2 h o menos) y «De anuncios». Cada filtro puesto se ve como etiqueta
+  con ✕, y cada conversación avisa «Vence en 1 h 20 min».
+
+### Cambió
+
+- La etapa y «De anuncios» salieron de la barra de la Bandeja y viven en el
+  menú «Filtrar» (052).
+
+### Arreglado
+
+- Si el archivo de un adjunto ya no está en el disco (un despliegue sin
+  volumen en `/data`), el CRM lo vuelve a bajar de Meta en vez de dar 410,
+  mientras Meta lo conserve. Igual, monta el volumen: es lo que guarda los
+  adjuntos.
+
+## 2.1.0 — 2026-10-22
+
+Una bandeja que se usa como WhatsApp. Actualizar es redesplegar con la
+etiqueta `2.1.0`: no hay migraciones ni variables nuevas. Va con
+[Nea 2.0.2](https://github.com/kevinrivm/nea-agent/blob/main/CHANGELOG.md),
+que transcribe las notas de voz pensando por el CRM sin configurar nada.
+
+### Nuevo
+
+- **Responder citando** un mensaje, como en WhatsApp (039).
+- **Ligas clicables** en los mensajes (040).
+- **Selector de emojis** en el compositor (041).
+- **Pegar y reenviar imágenes** (042) y **arrastrar una imagen** al chat (043).
+- **Notas de voz** (044): con la caja vacía el botón graba; se puede escuchar
+  antes de mandar. Salen a WhatsApp como nota de voz (Ogg/Opus); lo que graba
+  Chrome o Edge (WebM) se convierte en el servidor sin recodificar, con código
+  propio.
+- **Reproductor de audio** propio para todo audio del hilo (044): la onda del
+  audio, tocar o arrastrar para ir a un momento y velocidad 1× · 1.5× · 2×.
+- **Avisos de mensaje nuevo** (045): suena al llegar un mensaje del cliente, en
+  cualquier pantalla (campana en el menú para silenciar), y la pestaña cuenta
+  los chats sin leer: «(3) Vocero — CRM…».
+
+### Cambió
+
+- El compositor ya no ofrece enviar **ubicación ni contacto** (045). El
+  servidor los sigue aceptando por la API y la bandeja sigue mostrando los que
+  llegan.
+
+### Arreglado
+
+- Un adjunto que llegaba con la conversación abierta se quedaba en
+  «descargando…» hasta recargar (044).
+- Una conversación corta con una foto abría en el primer mensaje en vez del
+  último (045).
+- `audio/ogg; codecs=opus` (lo que graba Firefox) se rechazaba como tipo no
+  reconocido al adjuntarlo (044).
+
+## 2.0.0 — 2026-10-20
+
+El agente sale del CRM y se conecta por contrato. Vocero se queda con lo suyo
+—bandeja, pipeline, agenda, perfil del agente, conocimiento, la llave de IA y
+el Laboratorio— y contesta [Nea](https://github.com/kevinrivm/nea-agent) (MIT)
+u otro cerebro conectado al lado. Sin agente, Vocero es una bandeja manual.
+
+### Actualizar desde 1.6.0
+
+Es mayor: hay algo que hacer a mano. La guía completa, por caso (solo el
+agente incluido, Nea 1.x delante, cerebro propio), es
+[`docs/migrar-a-2.0.md`](docs/migrar-a-2.0.md). Lo corto:
+
+1. Respalda la base, como siempre.
+2. **docker compose**: `git pull`; si tu `.env` no tiene `BOT_API_KEY`,
+   agrégala (`openssl rand -hex 32`); y `docker compose up -d`: levanta el CRM
+   2.0.0 y Nea 2.0.0 sobre la misma base, con el despacho ya cableado. **Coolify**: la etiqueta `2.0.0` y un servicio más para Nea (guía,
+   «El par»). Las migraciones corren solas.
+3. Enciende el agente en la pantalla Agente: desde la 2.0 ese interruptor
+   decide si el CRM le despacha a tu agente, y solo se enciende con el agente
+   conectado y sano.
+4. Si tu número recibía los webhooks en Nea 1.x, **recupera el webhook** en
+   Configuración → WhatsApp.
+
+### ⚠️ Rompe: hay que hacer algo a mano
+
+- **El CRM ya no trae agente** (036). Quien contesta es el cerebro que
+  conectas al lado: [Nea](https://github.com/kevinrivm/nea-agent) (MIT) u
+  otro, por el despacho (`BRAIN_DISPATCH_URL` + `BOT_API_KEY`) y
+  `/api/bot/*`. Sin cerebro, Vocero es un CRM de bandeja manual: recibe, se
+  contesta a mano, pipeline y agenda. **Si usabas el agente incluido, nadie
+  contesta después de actualizar** hasta que levantes Nea (`docker compose
+  up -d`, o el servicio en Coolify) y vuelvas a encender el agente. El perfil, el conocimiento, la llave de Ajustes → IA y el
+  Laboratorio se quedan donde estaban.
+- **El interruptor de la pantalla Agente ahora decide el despacho** (036).
+  Encendido = el CRM le despacha a tu agente; apagado = las conversaciones se
+  quedan en la bandeja. Encenderlo exige un cerebro configurado y con su
+  `/health` sano (si no, 409 `sin_cerebro`). **Si ya despachabas con la 1.6 y
+  el interruptor estaba apagado** (entonces no importaba), enciéndelo después
+  de actualizar; la tarjeta «Quién responde» lo avisa.
+
+### Nuevo
+
+- **El despacho lleva lo que el cerebro leía del webhook** (031): `adOrigen`
+  en el contexto; `fileName`, `location` y `contacts` en los mensajes.
+- **El Laboratorio prueba al cerebro que contesta** (033), por el despacho;
+  `POST /api/bot/messages` guarda las respuestas de prueba sin enviarlas.
+- **Roles como datos** (034): rol Calificador y herramientas encendidas en la
+  pantalla Agente; `role` y `tools` en `/api/bot/profile`. Migración `0021`.
+- **Contrato público** (035): [`docs/openapi.json`](docs/openapi.json),
+  servido en `GET /api/bot/openapi.json` y validado en `pnpm test`.
+- **Recuperar el webhook** (035) en Configuración → WhatsApp, para quien
+  venía con Nea 1.x delante del CRM.
+- **El par en el compose** (035): `docker compose up -d` levanta Nea al lado
+  del CRM sobre la misma base, con el despacho ya cableado. Render trae el
+  servicio `vocero-nea`; `pnpm init-env` genera `BOT_API_KEY`.
+- **Tu agente piensa por el CRM** (036): `POST /api/bot/llm/{ruta}`, compatible
+  con OpenAI, reenvía al proveedor de Ajustes → IA con la llave guardada. La
+  llave se pone una vez, en la interfaz, y no sale del CRM; un 401 o 402 del
+  proveedor la pausa en Ajustes → IA. Sin IA, 402 `sin_credencial`. `/api/bot/*`
+  acepta también `Authorization: Bearer`.
+- **`llm` en `/api/bot/profile`** (036): `{path, model}` con el modelo de
+  Ajustes → IA, o `null` sin IA configurada. Nea 2.0 sin `LLM_API_KEY` lo usa
+  solo.
+- **«Conecta tu agente» en la guía de inicio** (036), opcional: se marca
+  cuando el despacho está configurado y el agente contesta su `/health`. Sin
+  agente, la guía dice que Vocero funciona como bandeja manual y no te deja
+  atrapado en ella.
+- **Tu agente mueve al lead de etapa** (038): `POST /api/bot/stage`, solo hacia
+  adelante y a etapas abiertas (ganar o perder lo decide una persona), con la
+  herramienta «Mover de etapa» del rol; el contexto trae `lead.nextStages`.
+  Nea 2.0 la usa.
+- **Adjuntos en un bucket S3-compatible** (037), opcional y apagado por
+  defecto: `MEDIA_STORE=bucket` y las `MEDIA_BUCKET_*`. Lo nuevo va al bucket
+  y lo viejo se sigue leyendo del volumen (sin migrar); si el bucket falla al
+  escribir, el archivo queda en el volumen. `docker compose --profile bucket`
+  levanta un MinIO propio. `/api/health` gana `features.media`; el sondeo de
+  `mediaWritable` y `pnpm doctor` prueban el bucket. Sin SDK de AWS.
+
+### Cambió
+
+- **El Laboratorio necesita un agente conectado** (036): las personas le
+  escriben por el despacho; sin él, crear una corrida responde 409
+  `sin_cerebro` y la pantalla lo explica. El juez sigue usando la llave de
+  Ajustes → IA.
+- **«Quién responde»** (036) deja el agente incluido y el aviso
+  `doble_respuesta`. Quedan `sin_cerebro` (informativo: bandeja manual) y
+  `apagado` (agente conectado con el interruptor apagado).
+- **Nea en el compose sin llave de IA** (036): el servicio `nea` ya no lleva
+  `LLM_API_KEY` y `.env.example` pierde `NEA_LLM_API_KEY`. Si la tenías en tu
+  `.env`, ya no se lee: puedes quitarla. Nea piensa por el CRM.
+- Ajustes → IA dice para qué es la llave: con ella piensa tu agente (a través
+  del CRM) y el juez del Laboratorio.
+
+### Se fue
+
+- El turno dentro del proceso (036): `src/server/ai/{pipeline,actions,trigger,handoff,orden-turno}.ts`,
+  el prompt del agente de `prompts.ts` (quedan `renderKb` y el prompt del
+  juez), `src/server/agenda/agent.ts` y `scripts/eval-silencios.ts`. Un fork
+  que los tocaba tiene que llevar ese comportamiento a su cerebro.
+
 ## 1.6.0 — 2026-10-14
 
 La versión multicanal. Instagram, Messenger y ahora TikTok llegan a la misma

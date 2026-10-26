@@ -1,5 +1,7 @@
 import {
+  MAX_REPLY_PARTS,
   MAX_TEXT_CHARS_ANY_CHANNEL,
+  replyParts,
   TEXT_TOO_LONG_ANY_CHANNEL,
 } from "@/server/channels/capabilities";
 import { and, eq } from "drizzle-orm";
@@ -8,13 +10,14 @@ import { getDb, schema } from "@/lib/db";
 import { apiError, parseBody } from "@/lib/api";
 import { requireBotKey, resolveInstanceOrg } from "@/server/bot/auth";
 import { SendError, sendText } from "@/server/inbox/send";
+import { guardarRespuestaDePrueba } from "@/server/lab/sandbox";
 
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   conversationId: z.string().min(1),
   // 022: el tope de aquí es el del canal que más admite; el de cada canal
-  // lo comprueba el envío y sale como el mismo 422 `invalid_body` de siempre.
+  // lo resuelve el envío partiendo el texto (Wline 031 · D8, abajo).
   text: z.string().min(1).max(MAX_TEXT_CHARS_ANY_CHANNEL, TEXT_TOO_LONG_ANY_CHANNEL),
 });
 
@@ -23,6 +26,18 @@ const bodySchema = z.object({
  * de aquí. Usa el mismo camino que el composer de la bandeja (`sendText`), así
  * que el mensaje queda en el hilo marcado como IA, respeta la ventana de 24 h
  * y hereda el guard de sandbox del Laboratorio.
+ *
+ * 033 — En una conversación de prueba del Laboratorio (`is_test`) la
+ * respuesta se GUARDA en el hilo y no se envía: es como un cerebro externo
+ * contesta una corrida. Antes respondía 409 `sandbox_violation`.
+ *
+ * Wline 031 · D8 — Un texto que no cabe en el canal (1.000 bytes en
+ * Instagram, 2.000 en Messenger, 4.096 caracteres en WhatsApp) sale en varios
+ * mensajes que sí caben, en orden, en vez de rechazarse con 422: el cerebro no
+ * tiene que saber el tope de cada canal. Lo que cabe sale entero, como
+ * siempre. `messageId` es el de la primera parte y `messageIds` trae todas.
+ * Si una parte falla, las que faltan no se mandan y se responde el error de
+ * esa parte, igual que con un solo mensaje.
  *
  * 409 tipados: ai_paused (un humano tomó la conversación) · window_closed ·
  * sandbox_violation · message_limit (022: el canal no admite más mensajes
@@ -48,6 +63,8 @@ export async function POST(req: Request) {
     .select({
       aiEnabled: schema.conversation.aiEnabled,
       handoffAt: schema.conversation.handoffAt,
+      isTest: schema.conversation.isTest,
+      channel: schema.conversation.channel,
     })
     .from(schema.conversation)
     .where(
@@ -63,15 +80,46 @@ export async function POST(req: Request) {
     return apiError(409, "ai_paused", "La IA está en pausa en esta conversación");
   }
 
+  // Se parte ANTES de separar el Laboratorio, para que la corrida guarde las
+  // mismas partes que recibiría el cliente.
+  const partes = replyParts(conv.channel, body.data.text);
+  if (partes.length === MAX_REPLY_PARTS) {
+    // Solo el id: el texto del cliente no va a los logs.
+    console.warn(
+      `[bot] ${body.data.conversationId}: la respuesta ocupó el tope de ${MAX_REPLY_PARTS} mensajes; si era más larga, se recortó.`
+    );
+  }
+
+  const messageIds: string[] = [];
+  if (conv.isTest) {
+    for (const parte of partes) {
+      const guardada = await guardarRespuestaDePrueba({
+        organizationId,
+        conversationId: body.data.conversationId,
+        text: parte,
+      });
+      messageIds.push(guardada.messageId);
+    }
+    return Response.json({ messageId: messageIds[0], messageIds, status: "sent" });
+  }
+
   try {
-    const result = await sendText({
-      conversationId: body.data.conversationId,
-      organizationId,
-      text: body.data.text,
-      aiGenerated: true,
-    });
-    return Response.json({ messageId: result.messageId });
+    for (const parte of partes) {
+      const result = await sendText({
+        conversationId: body.data.conversationId,
+        organizationId,
+        text: parte,
+        aiGenerated: true,
+      });
+      messageIds.push(result.messageId);
+    }
+    return Response.json({ messageId: messageIds[0], messageIds });
   } catch (err) {
+    if (messageIds.length > 0) {
+      console.warn(
+        `[bot] ${body.data.conversationId}: salieron ${messageIds.length} de ${partes.length} partes; las demás no se mandaron.`
+      );
+    }
     if (err instanceof SendError) {
       if (err.code === "window_closed") {
         return apiError(409, "window_closed", err.message);

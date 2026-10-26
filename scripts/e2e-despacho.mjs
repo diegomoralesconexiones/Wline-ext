@@ -1,35 +1,43 @@
 /**
- * Self-test E2E de comportamiento — 021: despacho estándar (#89) y 025: el
- * despacho recuerda qué debe.
+ * Self-test E2E de comportamiento — 021: despacho estándar (#89), 025: el
+ * despacho recuerda qué debe, y 036: sin agente incluido, el interruptor
+ * decide y el cerebro piensa por `/api/bot/llm`.
  *
- * Conduce la app real con los mocks de canal y hace de CEREBRO: levanta un
- * servidor HTTP en `BRAIN_DISPATCH_URL`, en este proceso (otro distinto del
- * CRM), recibe los despachos, verifica la firma sobre el cuerpo crudo como
- * debe hacerlo un cerebro de verdad y contesta por `/api/bot/messages`. Así el
- * turno cruza HTTP de verdad en las dos direcciones.
+ * Conduce la app real con los mocks de canal y hace de CEREBRO con el cerebro
+ * falso compartido (`scripts/lib/cerebro-falso.mjs`): un servidor HTTP en
+ * `BRAIN_DISPATCH_URL`, en este proceso (otro distinto del CRM), que sirve el
+ * `/health`, recibe los despachos y verifica la firma sobre el cuerpo crudo
+ * como debe hacerlo un cerebro de verdad. A los turnos REALES no contesta
+ * solo (`responder: "prueba"`): este guion contesta a mano por
+ * `/api/bot/messages` cuando el caso lo pide; a los del Laboratorio sí,
+ * pensando por el proxy `/api/bot/llm`. Así el turno cruza HTTP de verdad en
+ * las dos direcciones.
  *
- * Uso:
- *   1) app corriendo (`next dev`) sobre una base migrada, con
+ * Uso (configuración estándar de la 036, ver `scripts/lib/cerebro-falso.mjs`):
+ *   1) app corriendo (`pnpm dev`) sobre una base migrada, con
  *      WA_MOCK_ENABLED=true, META_GRAPH_BASE_URL → wa-mock,
  *      OPENROUTER_BASE_URL → ai-mock + OPENROUTER_API_TOKEN + OPENROUTER_MODEL,
- *      BOT_API_KEY, AGENT_COALESCE_MS corta (1500) y
- *      BRAIN_DISPATCH_URL=http://127.0.0.1:<puerto libre>/vocero/dispatch.
- *      Con CHANNELS=whatsapp,instagram,messenger,tiktok corre también esos
- *      canales (Instagram y TikTok entran por Zernio: ZERNIO_BASE_URL →
- *      zernio-mock).
- *   2) node --env-file=.env scripts/e2e-despacho.mjs
+ *      BOT_API_KEY, AGENT_COALESCE_MS=1500,
+ *      BRAIN_DISPATCH_URL=http://127.0.0.1:3261/vocero/dispatch (sin
+ *      BRAIN_HEALTH_URL) y CHANNELS=whatsapp,instagram,messenger,tiktok
+ *      (Instagram y TikTok entran por Zernio: ZERNIO_BASE_URL → zernio-mock).
+ *   2) node --env-file=.env.e2e-036 scripts/e2e-despacho.mjs
  *
- * Dos modos, según cómo arrancó la app (025):
- *   - con BRAIN_DISPATCH_URL: todo lo de arriba, el guion del cerebro;
- *   - sin ella: contesta el agente incluido, y se comprueba lo que le toca a
- *     él (un mensaje que entra mientras el modelo piensa; una persona que
- *     contesta dentro de la ventana). No hace falta BOT_API_KEY.
- * El gate completo son las dos corridas.
+ * 036: ya no hay modo «sin BRAIN_DISPATCH_URL → agente incluido»; ese agente
+ * no existe. Sin despacho el CRM es una bandeja manual, y eso lo cubren las
+ * pruebas unitarias (`interruptor-agente`, `brain-status`) y la guía del
+ * self-test.
  *
  * Sale con código 1 si algún check falla. Guion: tests/e2e/us-despacho.md.
  */
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { createServer } from "node:http";
+import { createHmac } from "node:crypto";
+import {
+  ACUSE_TRASPASO,
+  apagarAgente,
+  encenderAgente,
+  levantarCerebroFalso,
+  urlDelDespacho,
+} from "./lib/cerebro-falso.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const BOT_KEY = process.env.BOT_API_KEY ?? "";
@@ -103,81 +111,6 @@ async function hasta(cond, ms = 15000, paso = 250) {
 }
 
 // ---------------------------------------------------------------------------
-// El cerebro de prueba
-// ---------------------------------------------------------------------------
-
-function firmaOk(crudo, cabecera) {
-  if (typeof cabecera !== "string" || !cabecera.startsWith("sha256=")) return false;
-  const esperada = Buffer.from(
-    `sha256=${createHmac("sha256", BOT_KEY).update(crudo).digest("hex")}`
-  );
-  const recibida = Buffer.from(cabecera);
-  return esperada.length === recibida.length && timingSafeEqual(esperada, recibida);
-}
-
-async function levantarCerebro(url) {
-  const estado = {
-    /** "ok" | "500" | "422" | "lento" */
-    modo: "ok",
-    lentoMs: 3000,
-    recibidos: [],
-  };
-  const server = createServer((req, res) => {
-    if (req.method !== "POST" || (req.url ?? "").split("?")[0] !== url.pathname) {
-      res.writeHead(404);
-      return res.end();
-    }
-    const trozos = [];
-    req.on("data", (c) => trozos.push(c));
-    req.on("end", () => {
-      // El cuerpo CRUDO, antes de parsear: es sobre esto que se firma.
-      const crudo = Buffer.concat(trozos);
-      let evento = null;
-      try {
-        evento = JSON.parse(crudo.toString("utf8"));
-      } catch {}
-      estado.recibidos.push({
-        at: Date.now(),
-        modo: estado.modo,
-        crudo: crudo.toString("utf8"),
-        evento,
-        firmaOk: firmaOk(crudo, req.headers["x-vocero-signature"]),
-        cabeceras: {
-          dispatch: req.headers["x-vocero-dispatch-id"] ?? null,
-          org: req.headers["x-vocero-organization"] ?? null,
-          evento: req.headers["x-vocero-event"] ?? null,
-          tipo: req.headers["content-type"] ?? null,
-        },
-      });
-      const responder = (status) => {
-        res.writeHead(status, { "content-type": "application/json" });
-        res.end(JSON.stringify(status < 300 ? { status: "ok" } : { error: "simulado" }));
-      };
-      if (estado.modo === "500") return responder(500);
-      if (estado.modo === "422") return responder(422);
-      if (estado.modo === "lento") return setTimeout(() => responder(200), estado.lentoMs);
-      return responder(200);
-    });
-  });
-  const escuchar = () =>
-    new Promise((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(Number(url.port || 80), url.hostname.replace(/^\[|\]$/g, ""), resolve);
-    });
-  await escuchar();
-  return {
-    estado,
-    de: (convId) => estado.recibidos.filter((r) => r.evento?.conversation?.id === convId),
-    apagar: () =>
-      new Promise((resolve) => {
-        server.closeAllConnections();
-        server.close(() => resolve());
-      }),
-    encender: escuchar,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Atajos del guion
 // ---------------------------------------------------------------------------
 
@@ -225,16 +158,6 @@ const entranteGuardado = (convId, text) =>
     60
   );
 
-/** El mock de IA: `?reset=1`, `?demoraMs=3000`; devuelve lo que se le preguntó. */
-const iaMock = async (qs = "") =>
-  (await api(`/api/dev/ai-mock/v1/chat/completions${qs}`)).json ?? {};
-
-/** Las peticiones al modelo de UNA conversación: las que traen ese texto. */
-const peticionesCon = async (texto) =>
-  ((await iaMock()).peticiones ?? []).filter((p) =>
-    p.mensajes.some((m) => m.content === texto)
-  );
-
 /**
  * Hay casos que dependen de ganarle a la ventana de agrupado: algo tiene que
  * pasar ANTES de que venza. En una máquina cargada se puede perder esa
@@ -258,38 +181,15 @@ const TRAS_LA_VENTANA = COALESCE + 4000;
 // ---------------------------------------------------------------------------
 
 async function main() {
-  if (!(process.env.BRAIN_DISPATCH_URL ?? "").trim()) {
-    console.log("Sin BRAIN_DISPATCH_URL: modo AGENTE INCLUIDO (025).\n");
-    await guionIncluido();
-    console.log(`\n${checks - failures}/${checks} checks en verde`);
-    process.exit(failures > 0 ? 1 : 0);
-  }
-  if (BOT_KEY.length < 16) {
-    console.error("BOT_API_KEY ausente o corta (<16): sin ella no hay despacho.");
-    process.exit(1);
-  }
-  let url;
-  try {
-    url = new URL(process.env.BRAIN_DISPATCH_URL ?? "");
-  } catch {
-    console.error(
-      "Falta BRAIN_DISPATCH_URL. Arranca la app con algo como\n" +
-        "  BRAIN_DISPATCH_URL=http://127.0.0.1:3190/vocero/dispatch\n" +
-        "y corre este guion con el mismo entorno."
-    );
-    process.exit(1);
-  }
-  if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
-    console.error(
-      `BRAIN_DISPATCH_URL apunta a ${url.host}: este guion levanta el cerebro de prueba en esta máquina.`
-    );
-    process.exit(1);
-  }
-
-  const cerebro = await levantarCerebro(url);
+  const url = urlDelDespacho();
+  // A los turnos reales no contesta solo: el guion decide cuándo y qué.
+  const cerebro = await levantarCerebroFalso({ base: BASE, botKey: BOT_KEY, url, responder: "prueba" });
   try {
     await guion(cerebro, url);
   } finally {
+    // Apagado al terminar: con el cerebro falso cerrado, un interruptor
+    // encendido mandaría cada mensaje del siguiente guion a un humano.
+    if (cookie) await apagarAgente(api).catch(() => {});
     await cerebro.apagar().catch(() => {});
   }
 
@@ -297,7 +197,7 @@ async function main() {
   process.exit(failures > 0 ? 1 : 0);
 }
 
-/** Operador, WhatsApp por el wa-mock y el interruptor del agente encendido. */
+/** Operador y WhatsApp por el wa-mock. */
 async function preparar() {
   const email = "e2e@vocero.test";
   const password = "password-e2e-123";
@@ -319,23 +219,17 @@ async function preparar() {
   });
   ok("conexión de WhatsApp guardada (wa-mock)", conn.res.ok, JSON.stringify(conn.json));
   await api("/api/dev/wa-mock/outbox", { method: "DELETE" });
-
-  // A propósito: con IA configurada y el interruptor encendido, el agente
-  // incluido contestaría. El despacho tiene que callarlo.
-  const perfil = await api("/api/agent/profile", {
-    method: "PUT",
-    body: JSON.stringify({ enabled: true }),
-  });
-  ok("interruptor del agente incluido encendido", perfil.res.ok, JSON.stringify(perfil.json));
+  // Un traspaso por error de una corrida anterior no debe colarse aquí.
+  await apagarAgente(api);
 }
 
 async function guion(cerebro, url) {
-  console.log("== Setup: operador, WhatsApp y agente incluido ENCENDIDO ==");
+  console.log("== Setup: operador, WhatsApp y el cerebro falso ==");
   await preparar();
 
   const antes = await estadoCerebro();
   ok(
-    "el CRM dice que el despacho está activo",
+    "el CRM dice que el despacho está configurado",
     antes?.dispatch?.active === true && antes?.dispatch?.problem === null,
     JSON.stringify(antes?.dispatch)
   );
@@ -345,27 +239,204 @@ async function guion(cerebro, url) {
     );
     return;
   }
-  ok(
-    "el agente incluido tiene con qué contestar (IA + interruptor), y está en silencio",
-    antes.embedded?.configured === true &&
-      antes.embedded?.enabled === true &&
-      antes.embedded?.silenced === true &&
-      antes.embedded?.answering === false,
-    JSON.stringify(antes.embedded)
-  );
-  ok("sin aviso de doble respuesta", antes.warning === null, String(antes.warning));
 
+  await interruptor(cerebro);
+  await proxyLlm();
   await unMensaje(cerebro);
   await rafaga(cerebro);
   await enVuelo(cerebro);
   await mientrasPiensa(cerebro);
   await personaEnLaVentana(cerebro);
   await adjunto(cerebro);
+  await loQueDabaElWebhook(cerebro);
   await otrosCanales(cerebro);
   await pausas(cerebro);
   await laboratorio(cerebro);
   await cerebroCaido(cerebro);
   await tarjeta(cerebro, url);
+}
+
+// ---------------------------------------------------------------------------
+// 036 — El interruptor decide
+// ---------------------------------------------------------------------------
+
+async function interruptor(cerebro) {
+  console.log("\n== 036·AC4: con el interruptor APAGADO, un mensaje real no se despacha ==");
+  const st = await estadoCerebro();
+  ok(
+    "«Quién responde»: cerebro conectado e interruptor apagado → aviso «apagado»",
+    st?.enabled === false && st?.dispatch?.active === true && st?.warning === "apagado",
+    JSON.stringify({ enabled: st?.enabled, warning: st?.warning })
+  );
+  ok(
+    "el DTO ya no trae al agente incluido (sin `embedded`), sí `aiConfigured`",
+    Boolean(st) && !("embedded" in st) && typeof st.aiConfigured === "boolean",
+    JSON.stringify(Object.keys(st ?? {}))
+  );
+
+  const nombre = `Olga Apagado ${MARCA}`;
+  const texto = `¿me atienden? ${MARCA}`;
+  await entranteWa(telefono(12), nombre, texto);
+  const conv = await convDe(nombre);
+  ok("el mensaje entra a la bandeja", Boolean(conv));
+  await sleep(TRAS_LA_VENTANA);
+  ok(
+    "y no se despacha: el cerebro no recibe nada",
+    Boolean(conv) && cerebro.de(conv.id).length === 0,
+    String(conv ? cerebro.de(conv.id).length : "sin conversación")
+  );
+  const quieta = conv ? (await conversaciones()).find((c) => c.id === conv.id) : null;
+  ok(
+    "queda para una persona: sin turno en espera ni traspaso por error",
+    (await estadoCerebro())?.dispatch?.pending === 0 && quieta?.aiEnabled === true && !quieta?.handoffAt,
+    JSON.stringify({ ai: quieta?.aiEnabled, handoffAt: quieta?.handoffAt })
+  );
+
+  console.log("\n== 036·AC2: encender con el /health del cerebro caído → 409 sin_cerebro ==");
+  cerebro.estado.salud = "503";
+  // El CRM guarda el /health 15 s: si una consulta anterior lo vio sano, el
+  // primer intento todavía enciende. Se apaga y se reintenta hasta verlo caído.
+  let rechazo = null;
+  await hasta(
+    async () => {
+      const r = await api("/api/agent/profile", { method: "PUT", body: JSON.stringify({ enabled: true }) });
+      if (r.res.ok) {
+        await apagarAgente(api);
+        return null;
+      }
+      rechazo = r;
+      return r.res.status === 409;
+    },
+    25000,
+    1000
+  );
+  ok(
+    "409 sin_cerebro, con un mensaje que dice que el agente no contesta",
+    rechazo?.res.status === 409 &&
+      rechazo.json?.error?.code === "sin_cerebro" &&
+      /no contesta/.test(rechazo.json?.error?.message ?? ""),
+    `${rechazo?.res.status} ${JSON.stringify(rechazo?.json)}`
+  );
+  ok(
+    "y el interruptor sigue apagado",
+    (await api("/api/agent/profile")).json?.profile?.enabled === false
+  );
+  const caido = await estadoCerebro();
+  ok(
+    "«Quién responde» ve el /health caído (503), sin URL ni llave",
+    caido?.external?.health?.reachable === false &&
+      caido.external.health.httpStatus === 503 &&
+      caido.external.health.host === new URL(process.env.BRAIN_DISPATCH_URL).host,
+    JSON.stringify(caido?.external?.health)
+  );
+
+  console.log("\n== 036·AC4: con el cerebro sano se enciende, y entonces sí despacha ==");
+  cerebro.estado.salud = "ok";
+  const on = await encenderAgente(api);
+  ok("encender → 200 en cuanto el /health contesta", on.res.ok, `${on.res.status} ${JSON.stringify(on.json)}`);
+  const st2 = await estadoCerebro();
+  ok(
+    "enabled, sin aviso, y el /health en línea con versión y modo de Nea",
+    st2?.enabled === true &&
+      st2?.warning === null &&
+      st2?.external?.health?.reachable === true &&
+      st2.external.health.version === "2.0.0-e2e" &&
+      st2.external.health.mode === "estándar",
+    JSON.stringify({ enabled: st2?.enabled, warning: st2?.warning, health: st2?.external?.health })
+  );
+  ok(
+    "lo que entró con el interruptor apagado no se despacha al encender",
+    Boolean(conv) && cerebro.de(conv.id).length === 0
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 036 — El cerebro piensa por el CRM
+// ---------------------------------------------------------------------------
+
+async function proxyLlm() {
+  console.log("\n== 036·AC3: POST /api/bot/llm/{ruta}, compatible con OpenAI ==");
+  const pregunta = `¿qué tal? ${MARCA}`;
+  const llamar = (cabeceras) =>
+    fetch(`${BASE}/api/bot/llm/chat/completions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...cabeceras },
+      body: JSON.stringify({ model: "mock/agente", messages: [{ role: "user", content: pregunta }] }),
+    });
+  const leer = async (r) => {
+    const crudo = await r.text();
+    let json = null;
+    try {
+      json = JSON.parse(crudo);
+    } catch {}
+    return { status: r.status, crudo, json };
+  };
+  const bearer = { authorization: `Bearer ${BOT_KEY}` };
+
+  const sinLlave = await leer(await llamar({}));
+  ok("sin llave → 401", sinLlave.status === 401, String(sinLlave.status));
+  const mala = await leer(await llamar({ authorization: `Bearer ${"x".repeat(BOT_KEY.length)}` }));
+  ok("con un Bearer equivocado → 401", mala.status === 401, String(mala.status));
+  const conBearer = await leer(await llamar(bearer));
+  ok(
+    "con Authorization: Bearer (lo que manda el SDK) → 200 con la respuesta del proveedor",
+    conBearer.status === 200 &&
+      conBearer.json?.choices?.[0]?.message?.content === `Respuesta de prueba sobre: ${pregunta}`,
+    `${conBearer.status} ${conBearer.crudo.slice(0, 200)}`
+  );
+  const conXKey = await leer(await llamar({ "x-api-key": BOT_KEY }));
+  ok("con X-API-Key → 200 también", conXKey.status === 200, String(conXKey.status));
+  const tokenEntorno = process.env.OPENROUTER_API_TOKEN ?? "";
+  ok(
+    "ni la llave del proveedor ni BOT_API_KEY vuelven en la respuesta",
+    !conBearer.crudo.includes(BOT_KEY) && (!tokenEntorno || !conBearer.crudo.includes(tokenEntorno))
+  );
+  const perfil = await bot("/api/bot/profile");
+  ok(
+    "el perfil le dice al cerebro por dónde y con qué modelo pensar (`llm`)",
+    perfil.json?.llm?.path === "/api/bot/llm" &&
+      perfil.json.llm.model === (process.env.OPENROUTER_MODEL ?? perfil.json.llm.model),
+    JSON.stringify(perfil.json?.llm)
+  );
+
+  console.log("\n== 036·AC3: un 401 del proveedor pausa la llave de Ajustes → IA ==");
+  const TOKEN_MALO = `tok-ia-despacho-${RUN}-invalid`;
+  const guardar = await api("/api/settings/ai", {
+    method: "PUT",
+    body: JSON.stringify({
+      provider: "openai_compatible",
+      baseUrl: process.env.OPENROUTER_BASE_URL ?? `${BASE}/api/dev/ai-mock`,
+      model: "mock/agente",
+      token: TOKEN_MALO,
+    }),
+  });
+  ok("llave de prueba guardada en Ajustes → IA", guardar.res.ok, `${guardar.res.status} ${JSON.stringify(guardar.json)}`);
+  try {
+    const rechazada = await leer(await llamar(bearer));
+    ok(
+      "el 401 del proveedor vuelve tal cual, sin la llave",
+      rechazada.status === 401 && !rechazada.crudo.includes(TOKEN_MALO),
+      `${rechazada.status} ${rechazada.crudo.slice(0, 160)}`
+    );
+    const ajustes = (await api("/api/settings/ai")).json;
+    ok(
+      "y la llave queda pausada en Ajustes → IA",
+      ajustes?.activa === false,
+      JSON.stringify({ activa: ajustes?.activa, credencial: ajustes?.credencial, mensaje: ajustes?.mensaje })
+    );
+    const pausada = await leer(await llamar(bearer));
+    ok(
+      "con la llave pausada → 402 sin_credencial",
+      pausada.status === 402 && pausada.json?.error?.code === "sin_credencial",
+      `${pausada.status} ${pausada.crudo.slice(0, 160)}`
+    );
+    const perfilSin = await bot("/api/bot/profile");
+    ok("y el perfil dice `llm: null` (no hay con qué pensar)", perfilSin.json?.llm === null, JSON.stringify(perfilSin.json?.llm));
+  } finally {
+    await api("/api/settings/ai", { method: "DELETE" });
+  }
+  const vuelve = await leer(await llamar(bearer));
+  ok("sin la fila, el respaldo del entorno vuelve a pensar → 200", vuelve.status === 200, String(vuelve.status));
 }
 
 // ---------------------------------------------------------------------------
@@ -450,7 +521,9 @@ async function unMensaje(cerebro) {
   const outbox = (await api("/api/dev/wa-mock/outbox")).json?.outbox ?? [];
   ok("la respuesta salió por WhatsApp (wa-mock)", JSON.stringify(outbox).includes(respuesta));
 
-  console.log("\n== AC10: el agente incluido no contestó ==");
+  // 036: ya no hay agente incluido que pudiera contestar encima; lo que se
+  // cuida ahora es que el CRM no mande nada por su cuenta.
+  console.log("\n== AC10: nadie más contestó ==");
   await sleep(TRAS_LA_VENTANA);
   const salientes = (await mensajesDe(conv.id)).filter((m) => m.direction === "out");
   ok(
@@ -685,6 +758,84 @@ async function adjunto(cerebro) {
       `${media.status} ${media.headers.get("content-type")} ${bytes} bytes`
     );
   }
+}
+
+/**
+ * 031 — Lo que un cerebro delante del CRM leía del webhook de Meta y ahora le
+ * llega por el despacho o por el contexto: el anuncio de origen, la ubicación,
+ * las tarjetas de contacto y el nombre del documento.
+ */
+async function loQueDabaElWebhook(cerebro) {
+  console.log("\n== 031: anuncio, ubicación, tarjeta y PDF llegan al cerebro ==");
+  const nombre = `Eli Webhook ${MARCA}`;
+  const tel = telefono(11);
+  const titular = `Clases de salsa ${MARCA}`;
+  await entranteWa(tel, nombre, `vengo del anuncio ${MARCA}`, { adHeadline: titular });
+  const conv = await convDe(nombre);
+  if (!conv) return ok("la conversación existe", false);
+  await hasta(() => cerebro.de(conv.id)[0], COALESCE + 12000);
+
+  const porConv = await bot(`/api/bot/context?conversationId=${conv.id}`);
+  ok(
+    "el contexto trae adOrigen con el titular del anuncio",
+    porConv.json?.adOrigen?.headline === titular,
+    JSON.stringify(porConv.json?.adOrigen)
+  );
+  ok(
+    "y no trae el identificador del clic",
+    porConv.json?.adOrigen && !("ctwaClid" in porConv.json.adOrigen),
+    JSON.stringify(porConv.json?.adOrigen)
+  );
+  const sinAnuncio = await bot(`/api/bot/context?identity=${telefono(4)}`);
+  ok(
+    "una conversación que no vino de un anuncio trae adOrigen null",
+    sinAnuncio.res.status === 200 && sinAnuncio.json?.adOrigen === null,
+    `${sinAnuncio.res.status} ${JSON.stringify(sinAnuncio.json?.adOrigen)}`
+  );
+
+  const antes = cerebro.de(conv.id).length;
+  await entranteWa(tel, nombre, undefined, {
+    type: "location",
+    location: { latitude: 19.4326, longitude: -99.1332, name: "Zócalo", address: "Centro, CDMX" },
+  });
+  await entranteWa(tel, nombre, undefined, {
+    type: "contacts",
+    contacts: [{ name: { formatted_name: "Luis Gómez", first_name: "Luis" } }],
+  });
+  await entranteWa(tel, nombre, undefined, {
+    type: "document",
+    mediaId: `doc${RUN}`,
+    mimeType: "application/pdf",
+    filename: "cotizacion.pdf",
+  });
+  const llego = await hasta(() => {
+    const nuevos = cerebro.de(conv.id).slice(antes);
+    const ultimo = nuevos.at(-1);
+    return ultimo && ultimo.evento.messages.some((m) => m.type === "document") ? ultimo : null;
+  }, COALESCE + 15000);
+  const msgs = llego?.evento.messages ?? [];
+  const ubicacion = msgs.find((m) => m.type === "location");
+  const tarjeta = msgs.find((m) => m.type === "contacts");
+  const pdf = msgs.find((m) => m.type === "document");
+  ok(
+    "la ubicación viaja con coordenadas, nombre y dirección",
+    ubicacion?.location?.latitude === 19.4326 &&
+      ubicacion?.location?.longitude === -99.1332 &&
+      ubicacion?.location?.name === "Zócalo" &&
+      ubicacion?.location?.address === "Centro, CDMX",
+    JSON.stringify(ubicacion)
+  );
+  ok(
+    "la tarjeta viaja con el nombre del contacto",
+    JSON.stringify(tarjeta?.contacts) === JSON.stringify([{ name: "Luis Gómez" }]),
+    JSON.stringify(tarjeta)
+  );
+  ok(
+    "el PDF viaja con su nombre de archivo, después de caption",
+    pdf?.fileName === "cotizacion.pdf" && Object.keys(pdf).at(-1) === "fileName",
+    JSON.stringify(pdf)
+  );
+  ok("y la firma sigue siendo válida", llego?.firmaOk === true);
 }
 
 /**
@@ -989,31 +1140,106 @@ async function pausas(cerebro) {
 }
 
 async function laboratorio(cerebro) {
-  console.log("\n== AC13: el Laboratorio no se despacha ==");
+  console.log("\n== 033: el Laboratorio prueba al cerebro por el contrato ==");
+  await api("/api/dev/wa-mock/outbox", { method: "DELETE" });
   const total = cerebro.estado.recibidos.length;
   const run = await api("/api/lab/runs", { method: "POST" });
   if (!run.res.ok) {
-    console.log(`  SKIP no se pudo iniciar una corrida (${run.res.status}): ${JSON.stringify(run.json)}`);
+    ok("se pudo iniciar una corrida del Laboratorio", false, `${run.res.status} ${JSON.stringify(run.json)}`);
     return;
   }
   const id = run.json?.runId ?? run.json?.id;
-  const fin = await hasta(
+  const final = await hasta(
     async () => {
       const r = (await api(`/api/lab/runs/${id}`)).json;
       const st = r?.run?.status ?? r?.status;
-      return st && st !== "running" ? st : null;
+      return st && st !== "running" ? r : null;
     },
-    180000,
-    1000
+    600000,
+    2000
   );
-  ok("la corrida del Laboratorio terminó (con el agente incluido)", fin === "done", String(fin));
-  await sleep(TRAS_LA_VENTANA);
+  const estadoFinal = final?.run?.status ?? final?.status;
+  ok("la corrida terminó en verde contra el cerebro", estadoFinal === "done", JSON.stringify(final?.run ?? final)?.slice(0, 300));
   const nuevos = cerebro.estado.recibidos.slice(total);
+  const turnos = nuevos.filter((r) => !r.evento?.type);
+  const olvidos = nuevos.filter((r) => r.evento?.type === "conversation.deleted");
+  ok("al cerebro le llegaron los turnos de la corrida", turnos.length >= 8, `${turnos.length} despachos`);
   ok(
-    "ningún cliente simulado llegó al cerebro",
-    nuevos.length === 0,
-    JSON.stringify(nuevos.map((r) => r.evento?.contact?.displayName))
+    "todos con conversation.test: true y la firma válida",
+    turnos.length > 0 && turnos.every((r) => r.evento?.conversation?.test === true && r.firmaOk),
+    JSON.stringify(turnos.slice(0, 2).map((r) => r.evento?.conversation))
   );
+  ok(
+    "un despacho de prueba no espera la ventana de agrupado",
+    turnos.length > 0 && turnos.every((r) => r.evento.messages.length === 1),
+    JSON.stringify(turnos.map((r) => r.evento.messages.length))
+  );
+  // Lo que el cerebro manda DESPUÉS de traspasar él mismo esa conversación
+  // (en `next dev` el traspaso puede llegar después de la quietud del runner,
+  // que ya despachó la línea siguiente) recibe 409 ai_paused, y es lo
+  // correcto: no cuenta como el rechazo que se busca aquí.
+  const traspasadas = new Set(
+    cerebro.estado.respuestas.filter((r) => r.tipo === "handoff" && r.status === 200).map((r) => r.convId)
+  );
+  const respuestas = cerebro.estado.respuestas.filter(
+    (r) =>
+      r.ruta === "/api/bot/messages" &&
+      !(r.status === 409 && r.json?.error?.code === "ai_paused" && traspasadas.has(r.convId))
+  );
+  ok(
+    "/api/bot/messages guardó cada respuesta de prueba (200, sin 409)",
+    respuestas.length > 0 && respuestas.every((r) => r.status === 200 && r.json?.messageId),
+    JSON.stringify(respuestas.filter((r) => r.status !== 200).slice(0, 3))
+  );
+  ok(
+    "036: el cerebro pensó cada respuesta por /api/bot/llm (Bearer → 200)",
+    cerebro.estado.llm.length > 0 && cerebro.estado.llm.every((l) => l.status === 200 && l.ok),
+    JSON.stringify(cerebro.estado.llm.filter((l) => l.status !== 200).slice(0, 3))
+  );
+  const casos = final?.cases ?? [];
+  ok(
+    "un silencio del cerebro con el despacho entregado no es una falla (sin_rumbo)",
+    casos.length > 0 && casos.every((c) => c.status !== "agent_failed"),
+    JSON.stringify(casos.map((c) => [c.persona, c.status]))
+  );
+  const delCerebro = (t) =>
+    t.role === "agente" && (t.text.startsWith("Respuesta de prueba") || t.text === ACUSE_TRASPASO);
+  ok(
+    "las transcripciones traen lo que contestó el cerebro (lo pensado por el proxy, o el acuse del traspaso)",
+    casos.length >= 8 && casos.every((c) => (c.transcript ?? []).some(delCerebro)),
+    JSON.stringify(casos.map((c) => [c.persona, (c.transcript ?? []).length]))
+  );
+  ok(
+    "quien pide un humano recibe el acuse y el traspaso corta su caso",
+    casos.some((c) => (c.transcript ?? []).some((t) => t.role === "agente" && t.text === ACUSE_TRASPASO)),
+    JSON.stringify(casos.map((c) => [c.persona, c.status]))
+  );
+  ok("después de cada caso le llegó el olvido", olvidos.length >= casos.length && casos.length > 0, `${olvidos.length} olvidos para ${casos.length} casos`);
+  const outbox = (await api("/api/dev/wa-mock/outbox")).json?.outbox ?? [];
+  ok("ningún mensaje de la corrida salió por WhatsApp (wa-mock vacío)", outbox.length === 0, `${outbox.length} envíos`);
+
+  console.log("\n== 033: con el cerebro caído, la corrida dice por qué ==");
+  cerebro.estado.modo = "500";
+  const caida = await api("/api/lab/runs", { method: "POST" });
+  const idCaida = caida.json?.runId;
+  const t0 = Date.now();
+  const finCaida = await hasta(
+    async () => {
+      const r = (await api(`/api/lab/runs/${idCaida}`)).json;
+      const st = r?.run?.status ?? r?.status;
+      return st && st !== "running" ? r : null;
+    },
+    600000,
+    2000
+  );
+  cerebro.estado.modo = "ok";
+  const runCaida = finCaida?.run ?? finCaida;
+  ok(
+    "la corrida terminó failed con un motivo legible",
+    runCaida?.status === "failed" && /el agente no contestó/.test(runCaida?.error ?? ""),
+    JSON.stringify({ status: runCaida?.status, error: runCaida?.error })
+  );
+  ok("sin colgarse (menos de 2 min por caso)", Date.now() - t0 < 8 * 120000, `${Math.round((Date.now() - t0) / 1000)} s`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1151,174 +1377,35 @@ async function tarjeta(cerebro, url) {
     !crudo.includes(url.pathname) && !crudo.includes(BOT_KEY)
   );
   ok(
-    "las llaves de antes siguen ahí",
-    typeof st?.embedded?.answering === "boolean" &&
+    "las llaves del DTO de la 036: enabled, aiConfigured, external, dispatch y warning (sin embedded)",
+    st?.enabled === true &&
+      typeof st?.aiConfigured === "boolean" &&
       typeof st?.external?.active === "boolean" &&
-      "warning" in (st ?? {}) &&
-      "lastSeenAt" in (st?.external ?? {})
+      "lastSeenAt" in (st?.external ?? {}) &&
+      st?.warning === null &&
+      !("embedded" in (st ?? {})),
+    JSON.stringify(Object.keys(st ?? {}))
   );
   ok("el cerebro cuenta como el que contesta", st?.external?.active === true);
+
+  console.log("\n== 036·D8: apagar el interruptor enciende el aviso «apagado» ==");
+  const off = await apagarAgente(api);
+  const apagado = await estadoCerebro();
+  ok(
+    "con el cerebro conectado y el interruptor apagado → warning «apagado»",
+    off.res.ok && apagado?.enabled === false && apagado?.warning === "apagado",
+    JSON.stringify({ enabled: apagado?.enabled, warning: apagado?.warning })
+  );
+  const on = await encenderAgente(api);
+  const otraVez = await estadoCerebro();
+  ok(
+    "y encenderlo lo quita",
+    on.res.ok && otraVez?.enabled === true && otraVez?.warning === null,
+    JSON.stringify({ status: on.res.status, warning: otraVez?.warning })
+  );
   const anon = await fetch(`${BASE}/api/agent/brain-status`);
   ok("sin sesión → 401", anon.status === 401, String(anon.status));
   console.log(`\n  (el cerebro de prueba recibió ${cerebro.estado.recibidos.length} peticiones en total)`);
-}
-
-// ---------------------------------------------------------------------------
-// 025 — Sin cerebro externo: el agente incluido
-// ---------------------------------------------------------------------------
-
-async function guionIncluido() {
-  console.log("== Setup: operador, WhatsApp y agente incluido ENCENDIDO ==");
-  await preparar();
-  await iaMock("?reset=1&demoraMs=0");
-  const st = await estadoCerebro();
-  ok(
-    "no hay despacho: contesta el agente incluido",
-    st?.dispatch?.active === false && st?.embedded?.answering === true,
-    JSON.stringify({ dispatch: st?.dispatch, embedded: st?.embedded })
-  );
-  if (st?.embedded?.answering !== true) {
-    console.error(
-      "\nEl agente incluido no puede contestar: revisa OPENROUTER_BASE_URL → ai-mock, OPENROUTER_API_TOKEN y OPENROUTER_MODEL."
-    );
-    return;
-  }
-  try {
-    await incluidoEnVuelo();
-    await incluidoPersona();
-  } finally {
-    await iaMock("?reset=1&demoraMs=0");
-  }
-  ok(
-    "y nada de esto pasó por el outbox del despacho",
-    (await estadoCerebro())?.dispatch?.pending === 0
-  );
-}
-
-async function incluidoEnVuelo() {
-  console.log("\n== 025·AC6: el agente incluido atiende el mensaje que entra mientras piensa ==");
-  /**
-   * El turno se repite desde siempre cuando entra algo a mitad (`pending`).
-   * Lo que fallaba era el ORDEN: por hora de llegada el segundo mensaje va
-   * ANTES de la respuesta al primero; leído así, el modelo ve un hilo que
-   * termina en su propia respuesta y lo da por contestado.
-   *
-   * El modelo de prueba tarda 5 s en contestar: es el hueco en el que entra
-   * el segundo mensaje. Si aun así no entra a tiempo (la primera vez `next
-   * dev` compila rutas), el caso se repite con otro contacto.
-   */
-  const DEMORA_MS = 5000;
-  const caso = await conLaVentanaAbierta(async (i) => {
-    const nombre = `Nora Incluida ${i} ${MARCA}`;
-    const uno = `¿tienen taladros? ${i} ${MARCA}`;
-    const dos = `¿mandan a Celaya? ${i} ${MARCA}`;
-    await iaMock(`?demoraMs=${DEMORA_MS}`);
-    await entranteWa(telefono(40 + i), nombre, uno);
-    const conv = await convDe(nombre);
-    if (!conv) return null;
-    const primera = await hasta(async () => (await peticionesCon(uno))[0], COALESCE + 12000, 100);
-    if (primera?.mensajes.at(-1)?.content !== uno) return null;
-
-    await entranteWa(telefono(40 + i), nombre, dos);
-    const segundo = await entranteGuardado(conv.id, dos);
-    const contestaEn = Date.parse(primera.at) + DEMORA_MS;
-    // Si el modelo ya contestó, el segundo mensaje no entró «a mitad»: sería
-    // un turno normal y el caso pasaría sin probar nada.
-    if (!segundo || Date.now() > contestaEn - 300) {
-      await iaMock("?demoraMs=0");
-      return null;
-    }
-    return { conv, uno, dos };
-  });
-  ok("el segundo mensaje entró con el modelo todavía pensando en el primero", Boolean(caso));
-  if (!caso) return;
-  const { conv, uno, dos } = caso;
-
-  // El segundo turno ya no necesita ir lento.
-  await iaMock("?demoraMs=0");
-  const salientes = await hasta(
-    async () => {
-      const out = (await mensajesDe(conv.id)).filter((m) => m.direction === "out");
-      return out.length >= 2 ? out : null;
-    },
-    DEMORA_MS + COALESCE + 12000
-  );
-
-  // Que no entre en bucle: se espera otra ventana antes de contar.
-  await sleep(TRAS_LA_VENTANA);
-  const peticiones = await peticionesCon(uno);
-  ok(
-    "el agente gasta UN turno más: ni se queda callado ni entra en bucle",
-    peticiones.length === 2,
-    `turnos del modelo: ${peticiones.length} — con 1, el segundo mensaje se quedó sin atender`
-  );
-
-  console.log("\n== 025·AC7: y lo lee DESPUÉS de su propia respuesta ==");
-  const charla = (peticiones[1]?.mensajes ?? []).map((m) => `${m.role}: ${m.content}`);
-  ok(
-    "cliente, agente, cliente",
-    charla.length === 3 &&
-      charla[0] === `user: ${uno}` &&
-      charla[1].startsWith("assistant: ") &&
-      charla[2] === `user: ${dos}`,
-    `leyó: ${JSON.stringify(charla)}`
-  );
-
-  console.log("\n== 025·AC8: el cliente recibe las dos respuestas, cada una a lo suyo ==");
-  const finales = (await mensajesDe(conv.id)).filter((m) => m.direction === "out");
-  ok(
-    "dos salientes: uno sobre los taladros y otro sobre el envío",
-    finales.length === 2 &&
-      finales.some((m) => m.text?.includes(uno)) &&
-      finales.some((m) => m.text?.includes(dos)),
-    JSON.stringify((salientes ?? finales).map((m) => m.text))
-  );
-}
-
-async function incluidoPersona() {
-  console.log("\n== 025·AC5b: si una persona contesta dentro de la ventana, el agente incluido no contesta encima ==");
-  await iaMock("?demoraMs=0");
-  const caso = await conLaVentanaAbierta(async (i) => {
-    const nombre = `Omar Atendido ${i} ${MARCA}`;
-    const texto = `¿a qué hora cierran? ${i} ${MARCA}`;
-    await entranteWa(telefono(50 + i), nombre, texto);
-    const conv = await convDe(nombre);
-    if (!conv) return null;
-    const envio = await aMano(conv.id, `Cerramos a las 7 ${i} ${MARCA}`);
-    if (!envio.res.ok || (await peticionesCon(texto)).length !== 0) return null;
-    return { conv, nombre, texto, i };
-  });
-  ok("una persona contesta con la ventana todavía abierta", Boolean(caso));
-  if (!caso) return;
-  const { conv, nombre, texto, i } = caso;
-
-  await sleep(TRAS_LA_VENTANA);
-  ok(
-    "el modelo no gastó un turno en ese mensaje",
-    (await peticionesCon(texto)).length === 0,
-    String((await peticionesCon(texto)).length)
-  );
-  const salientes = (await mensajesDe(conv.id)).filter((m) => m.direction === "out");
-  ok(
-    "el único saliente es el de la persona",
-    salientes.length === 1 && salientes[0].text === `Cerramos a las 7 ${i} ${MARCA}`,
-    JSON.stringify(salientes.map((m) => m.text))
-  );
-  const despues = (await conversaciones()).find((c) => c.id === conv.id);
-  ok(
-    "la IA de la conversación sigue encendida",
-    despues?.aiEnabled === true && !despues?.handoffAt,
-    JSON.stringify({ ai: despues?.aiEnabled, handoffAt: despues?.handoffAt })
-  );
-
-  const otro = `¿y los domingos? ${i} ${MARCA}`;
-  await entranteWa(telefono(50 + i), nombre, otro);
-  const respuesta = await hasta(
-    async () =>
-      (await mensajesDe(conv.id)).find((m) => m.direction === "out" && m.text?.includes(otro)),
-    COALESCE + 12000
-  );
-  ok("el siguiente mensaje del cliente sí lo contesta el agente", Boolean(respuesta));
 }
 
 main().catch((err) => {

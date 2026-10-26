@@ -2,23 +2,24 @@
  * Self-test E2E de comportamiento — 022: canal de TikTok (por Zernio).
  *
  * Conduce la app real con los mocks: conecta la cuenta, mete mensajes por el
- * webhook como lo haría Zernio (firmados), deja que el agente incluido
- * conteste, responde desde la bandeja y empuja los límites que TikTok impone
+ * webhook como lo haría Zernio (firmados), deja que el agente (036: el
+ * cerebro falso de `scripts/lib/cerebro-falso.mjs`, por el despacho) conteste, responde desde la bandeja y empuja los límites que TikTok impone
  * —diez mensajes desde el último entrante, 48 horas, 6,000 caracteres—,
  * comprobando cada paso por las mismas superficies que usa el operador.
  *
- * Uso:
- *   1) app corriendo (`next dev`) sobre una base migrada, SIN
- *      BRAIN_DISPATCH_URL, con CHANNELS que incluya `tiktok` (y, para el
- *      reparto por plataforma, `instagram`), WA_MOCK_ENABLED=true,
- *      ZERNIO_BASE_URL → zernio-mock, OPENROUTER_BASE_URL → ai-mock con
- *      OPENROUTER_API_TOKEN y OPENROUTER_MODEL, BOT_API_KEY y
- *      AGENT_COALESCE_MS corta (1500).
- *   2) node --env-file=.env scripts/e2e-tiktok.mjs
+ * Uso (configuración estándar de la 036, ver `scripts/lib/cerebro-falso.mjs`):
+ *   1) app corriendo (`pnpm dev`) sobre una base migrada, con
+ *      BRAIN_DISPATCH_URL=http://127.0.0.1:3261/vocero/dispatch, CHANNELS que
+ *      incluya `tiktok` (y, para el reparto por plataforma, `instagram`),
+ *      WA_MOCK_ENABLED=true, ZERNIO_BASE_URL → zernio-mock,
+ *      OPENROUTER_BASE_URL → ai-mock con OPENROUTER_API_TOKEN y
+ *      OPENROUTER_MODEL, BOT_API_KEY y AGENT_COALESCE_MS=1500.
+ *   2) node --env-file=.env.e2e-036 scripts/e2e-tiktok.mjs
  *
  * Sale con código 1 si algún check falla. Guion: tests/e2e/us-tiktok.md.
  */
 import { createHmac } from "node:crypto";
+import { apagarAgente, encenderAgente, levantarCerebroFalso } from "./lib/cerebro-falso.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN ?? "";
@@ -153,14 +154,14 @@ const aMano = (convId, text) =>
     body: JSON.stringify({ text }),
   });
 
-/** La respuesta del agente incluido a ese texto del cliente. */
+/** La respuesta del agente (el cerebro falso, pensando por /api/bot/llm) a ese texto del cliente. */
 const respuestaDelAgente = (convId, textoDelCliente) =>
   hasta(
     async () =>
       (await mensajesDe(convId)).find(
         (m) => m.direction === "out" && m.aiGenerated && m.text?.includes(textoDelCliente.slice(0, 60))
       ),
-    COALESCE + 12000
+    COALESCE + 30000
   );
 
 // ---------------------------------------------------------------------------
@@ -170,13 +171,7 @@ async function main() {
     console.error("CHANNELS no incluye `tiktok`: arranca la app con el canal encendido.");
     process.exit(1);
   }
-  if ((process.env.BRAIN_DISPATCH_URL ?? "").trim()) {
-    console.error(
-      "La app tiene BRAIN_DISPATCH_URL: este guion necesita al agente incluido. " +
-        "El despacho de TikTok se comprueba en scripts/e2e-despacho.mjs."
-    );
-    process.exit(1);
-  }
+  const cerebro = await levantarCerebroFalso({ base: BASE, botKey: BOT_KEY });
 
   console.log("== Setup ==");
   const email = "e2e@vocero.test";
@@ -213,18 +208,21 @@ async function main() {
     method: "POST",
     body: JSON.stringify({ webhooks: [] }),
   });
-  const perfil = await api("/api/agent/profile", {
-    method: "PUT",
-    body: JSON.stringify({ enabled: true }),
-  });
-  ok("agente incluido encendido", perfil.res.ok, JSON.stringify(perfil.json));
+  const perfil = await encenderAgente(api);
+  ok("agente encendido (contesta el cerebro falso)", perfil.res.ok, JSON.stringify(perfil.json));
 
-  await conectar();
-  const hilo = await recibirYContestar();
-  if (hilo) await limites(hilo);
-  await ventana();
-  await descartes();
-  await reparto();
+  try {
+    await conectar();
+    const hilo = await recibirYContestar();
+    if (hilo) await limites(hilo);
+    await ventana();
+    await descartes();
+    await reparto();
+  } finally {
+    await apagarAgente(api);
+    await cerebro.esperar();
+    await cerebro.apagar();
+  }
 
   console.log(`\n${checks - failures}/${checks} checks en verde`);
   process.exit(failures > 0 ? 1 : 0);
@@ -356,7 +354,7 @@ async function recibirYContestar() {
     (await mensajesDe(conv.id)).filter((m) => m.direction === "in").length === 1
   );
 
-  console.log("\n== AC8: el agente incluido contesta por TikTok ==");
+  console.log("\n== AC8: el agente contesta por TikTok ==");
   const respuesta = await respuestaDelAgente(conv.id, texto);
   ok("hay una respuesta del agente en la conversación", Boolean(respuesta));
   ok(

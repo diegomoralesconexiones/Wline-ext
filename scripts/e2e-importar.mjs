@@ -3,17 +3,25 @@
  *
  * Conduce la app real con los simuladores: importa por la misma ruta que usa
  * el diálogo, hace escribir a los importados por WhatsApp y comprueba qué
- * quedó en Contactos, en la bandeja y qué hizo (o calló) el agente incluido.
+ * quedó en Contactos, en la bandeja y qué hizo (o calló) el agente.
  *
- * Uso:
- *   1) app corriendo (`next dev`) sobre una base migrada, SIN
- *      BRAIN_DISPATCH_URL, con WA_MOCK_ENABLED=true, META_GRAPH_BASE_URL →
- *      wa-mock, OPENROUTER_BASE_URL → ai-mock con OPENROUTER_API_TOKEN y
- *      OPENROUTER_MODEL, y AGENT_COALESCE_MS corta (1500).
- *   2) node --env-file=.env scripts/e2e-importar.mjs
+ * 036 — El agente es el cerebro falso compartido (`scripts/lib/cerebro-falso.mjs`),
+ * que escucha en `BRAIN_DISPATCH_URL` y contesta por `/api/bot/*`, con el
+ * interruptor del Agente encendido. «Sin agente» sigue siendo la IA en pausa
+ * de la conversación: con ella el CRM no le despacha nada al cerebro.
+ *
+ * Uso (configuración estándar de la 036, ver `scripts/lib/cerebro-falso.mjs`):
+ *   1) app corriendo (`pnpm dev`) sobre una base migrada, con
+ *      BRAIN_DISPATCH_URL=http://127.0.0.1:3261/vocero/dispatch, BOT_API_KEY,
+ *      WA_MOCK_ENABLED=true, META_GRAPH_BASE_URL → wa-mock,
+ *      OPENROUTER_BASE_URL → ai-mock con OPENROUTER_API_TOKEN y
+ *      OPENROUTER_MODEL, y AGENT_COALESCE_MS=1500.
+ *   2) node --env-file=.env.e2e-036 scripts/e2e-importar.mjs
  *
  * Sale con código 1 si algún check falla. Guion: tests/e2e/us-importar.md.
  */
+import { apagarAgente, encenderAgente, levantarCerebroFalso } from "./lib/cerebro-falso.mjs";
+
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const COALESCE = Number(process.env.AGENT_COALESCE_MS ?? 6000);
 const PN = "PN-E2E-1";
@@ -83,14 +91,14 @@ const conversaciones = async () => (await api("/api/conversations")).json?.conve
 const convDe = (contactId, ms) =>
   hasta(async () => (await conversaciones()).find((c) => c.contact?.id === contactId && c.lastInboundAt), ms);
 const mensajes = async (id) => (await api(`/api/conversations/${id}/messages`)).json?.messages ?? [];
-const respuestaDelAgente = (convId, ms = COALESCE + 12000) =>
+// Generoso: en `next dev` la primera respuesta compila /api/bot/llm y /api/bot/messages.
+const respuestaDelAgente = (convId, ms = COALESCE + 30000) =>
   hasta(async () => (await mensajes(convId)).find((m) => m.direction === "out" && m.aiGenerated), ms);
 
+let cerebro = null;
+
 async function main() {
-  if ((process.env.BRAIN_DISPATCH_URL ?? "").trim()) {
-    console.error("La app tiene BRAIN_DISPATCH_URL: este guion necesita al agente incluido.");
-    process.exit(1);
-  }
+  cerebro = await levantarCerebroFalso({ base: BASE, botKey: process.env.BOT_API_KEY ?? "" });
   console.log("== Setup ==");
   const email = "e2e@vocero.test";
   const password = "password-e2e-123";
@@ -99,10 +107,18 @@ async function main() {
   ok("registro o login del propietario", su.res.ok, JSON.stringify(su.json));
   const conn = await api("/api/settings/whatsapp", { method: "PUT", body: JSON.stringify({ wabaId: "WABA-E2E", phoneNumberId: PN, token: "tok-e2e" }) });
   ok("WhatsApp conectado (wa-mock)", conn.res.ok, JSON.stringify(conn.json));
-  ok("agente incluido encendido", (await api("/api/agent/profile", { method: "PUT", body: JSON.stringify({ enabled: true }) })).res.ok);
+  const on = await encenderAgente(api);
+  ok("agente encendido (contesta el cerebro falso)", on.res.ok, `${on.res.status} ${JSON.stringify(on.json)}`);
 
-  await cincuenta();
-  await sinAgente();
+  try {
+    await cincuenta();
+    await sinAgente();
+  } finally {
+    // Apagado antes de cerrar el cerebro: el siguiente guion no debe heredarlo.
+    await apagarAgente(api);
+    await cerebro.esperar();
+    await cerebro.apagar();
+  }
   await limites();
 
   console.log(`\n${checks - failures}/${checks} checks en verde`);
@@ -206,6 +222,7 @@ async function sinAgente() {
   const salientesMiembro = (await mensajes(convMiembro.id)).filter((m) => m.direction === "out");
   const salientesViejo = (await mensajes(convVieja.id)).filter((m) => m.direction === "out");
   ok("al importado el agente no le contestó", salientesMiembro.length === 0, `salientes: ${salientesMiembro.length}`);
+  ok("ni el CRM le despachó nada al cerebro", cerebro.de(convMiembro.id).length === 0, `despachos: ${cerebro.de(convMiembro.id).length}`);
   ok("ni volvió a contestarle a quien ya existía", salientesViejo.length === 1, `salientes: ${salientesViejo.length}`);
 
   console.log("\n== Un renglón sin nombre ==");
