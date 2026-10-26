@@ -11,8 +11,9 @@ este repositorio o no se deshace solo.
 - [x] T004 `tests/unit/bot-messages-partes.test.ts`: en rojo con la ruta de Kevin, en verde con D8.
 - [x] T005 Cerebro falso con `RESPUESTA_LARGA`; `e2e-ventana-social` (AC17) y `e2e-messenger` (AC18) contra él.
 - [x] T006 Renombrar la spec 031 del fork a `w031-instagram-messenger-produccion`.
-- [ ] T007 Gate: `pnpm typecheck && pnpm lint && pnpm build && pnpm test` y `pnpm check:task` (AC1).
-- [ ] T008 E2E con mocks y el cerebro falso: `e2e-ventana-social`, `e2e-messenger`, `e2e-canales` y `e2e-selftest` (AC6).
+- [x] T007 Gate: `pnpm typecheck && pnpm lint && pnpm build && pnpm test` y `pnpm check:task` (AC1). 125 archivos y 1.417 unitarias en verde; cobertura 31,04% (piso 27,93%), líneas nuevas del fork 88,9%.
+- [x] T008 E2E con mocks y el cerebro falso, app 2.5.1 en local (AC6): `e2e-ventana-social` 72/72, `e2e-messenger` 48/48, `e2e-canales` 86/86, `e2e-despacho` 134/134, `e2e-tiktok` 52/52 y `e2e-selftest` 280/280.
+- [x] T008b Regla «Versiones de Kevin» en CONSTRAINTS.md (decisión del **Dueño**): con una versión de Kevin en la rama, el piso juzga contra ella. `floor-guard` contra `main` daba 101 violaciones, todas de Kevin.
 - [ ] T009 **Preguntar antes**. Push de la rama y PR a `main` del fork, con CI en verde. El merge lo aprueba el **Dueño**.
 - [ ] T010 **Preguntar antes**. Etiqueta `v2.5.1-wline.1`; verificar que *Imagen* publica `ghcr.io/diegomoralesconexiones/wline-ext:2.5.1-wline.1`.
 
