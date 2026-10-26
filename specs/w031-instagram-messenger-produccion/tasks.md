@@ -236,7 +236,7 @@ desviaciones.
 - [x] T032 [US4] **Dueño**: mensaje real desde su Facebook personal a la página. Las mismas verificaciones, por Messenger (AC13).
 - [x] T033 [US4] **Dueño**: un DM de Instagram que pida una respuesta larga. Llega en partes, sin silencio (AC17 en vivo).
 - [x] T034 [US4] **Dueño**: un WhatsApp de ida y vuelta, sin cambios (AC14).
-- [ ] T035 [US4] Llenar la sección «Prueba en vivo» de `specs/031-instagram-messenger-produccion/spec.md`: fecha, commit, resultado de AC9–AC14 y AC17, y cualquier desviación.
+- [ ] T035 [US4] Llenar la sección «Prueba en vivo» de `specs/w031-instagram-messenger-produccion/spec.md`: fecha, commit, resultado de AC9–AC14 y AC17, y cualquier desviación.
 
 **Checkpoint**: Instagram y Messenger atendiendo en producción.
 
@@ -246,7 +246,7 @@ desviaciones.
 
 - [ ] T036 [P] En `docs/zernio-meta-referencia.md` §3, marcar como resueltos la respuesta de envío de Instagram, el mock y el comentario de reintentos (de ❌/⚠️ a ✅, citando la 031).
 - [ ] T037 [P] Agregar la 031 al índice de `specs/README.md`, y crear `docs/bitacora-wline.md` (propia del fork) con la salida a producción. Así la bitácora de Kevin no choca al hacer *Sync fork* (D7).
-- [ ] T038 Actualizar el `Status` de `specs/031-instagram-messenger-produccion/spec.md` a «Implementada; gates y E2E en verde; probada en vivo en Wline-ext».
+- [ ] T038 Actualizar el `Status` de `specs/w031-instagram-messenger-produccion/spec.md` a «Implementada; gates y E2E en verde; probada en vivo en Wline-ext».
 
 ---
 

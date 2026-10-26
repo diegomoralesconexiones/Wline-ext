@@ -191,7 +191,7 @@ para ubicar código antes de buscar a mano. Si no existe, ignora esta sección.
   en lenguaje natural empareja por palabra clave y da ruido:
   - `graphify affected "inbox/send.ts" --depth 1` — quién importa/llama a X
     (impacto antes de cambiarlo).
-  - `graphify explain "deliverReply"` — vecinos de un nodo con archivo:línea.
+  - `graphify explain "sendText"` — vecinos de un nodo con archivo:línea.
   - `graphify path "A" "B"` — cómo se conecta un módulo con otro.
   - `graphify query "<pregunta>" --budget 1500` — último recurso, con presupuesto.
 - `graphify-out/GRAPH_REPORT.md` solo para revisión amplia de arquitectura

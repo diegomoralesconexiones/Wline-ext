@@ -2,7 +2,7 @@
 
 **Branch**: `feat/031-instagram-messenger-produccion` | **Date**: 2026-10-21 | **Spec**: [spec.md](spec.md)
 
-**Input**: [specs/031-instagram-messenger-produccion/spec.md](spec.md), con Q1 y Q2 resueltas.
+**Input**: [specs/w031-instagram-messenger-produccion/spec.md](spec.md), con Q1 y Q2 resueltas.
 
 ## Summary
 
@@ -67,7 +67,7 @@ las cuentas del dueño (D6). Las decisiones de diseño están en
 ### Documentation (this feature)
 
 ```text
-specs/031-instagram-messenger-produccion/
+specs/w031-instagram-messenger-produccion/
 ├── spec.md                         # Comportamiento y criterios de aceptación
 ├── plan.md                         # Este archivo
 ├── research.md                     # Fase 0: R1–R9
