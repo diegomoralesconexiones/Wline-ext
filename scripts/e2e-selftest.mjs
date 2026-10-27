@@ -1618,6 +1618,12 @@ async function guiaChecks() {
   const texto = (h) => h.replace(/<!--.*?-->/g, "");
   const pantallaHtml = async () =>
     texto(await (await fetch(`${BASE}/onboarding`, { headers: { cookie } })).text());
+  // w035 — ¿El menú ofrece la guía? Se mira desde la Bandeja y por el enlace:
+  // la propia guía dice «Guía de inicio» en su encabezado y engañaría.
+  const menuConGuia = async () =>
+    (await (await fetch(`${BASE}/inbox`, { headers: { cookie } })).text()).includes(
+      'href="/onboarding"'
+    );
 
   // --- Punto de partida reproducible ---
   await api("/api/settings/ai", { method: "DELETE" });
@@ -1730,6 +1736,7 @@ async function guiaChecks() {
     html.includes("Al final: encender a") && html.includes("empieza apagado")
   );
   ok("…y la entrada «Guía de inicio» en el menú", html.includes("Guía de inicio"));
+  ok("w035 — …y el menú de la Bandeja la ofrece mientras falte algo", await menuConGuia());
 
   // --- Los pasos se marcan solos ---
   const perfilOk = await api("/api/agent/profile", {
@@ -1828,6 +1835,7 @@ async function guiaChecks() {
     mandaA("/inbox")(rManual),
     rManual
   );
+  ok("w035 — …y el menú ya no ofrece la guía", !(await menuConGuia()));
   const htmlManual = await pantallaHtml();
   ok(
     "la tarjeta final dice «bandeja manual» y no ofrece encender",
@@ -1866,6 +1874,7 @@ async function guiaChecks() {
   );
   const r1 = await raiz();
   ok("…y la raíz SIGUE mandando a /onboarding: falta encenderlo", mandaA("/onboarding")(r1), r1);
+  ok("w035 — …y el menú vuelve a ofrecer la guía", await menuConGuia());
   const htmlListo = await pantallaHtml();
   ok(
     "la tarjeta final ofrece «Encender a Sofi» (el nombre, ya configurado)",
@@ -1882,6 +1891,7 @@ async function guiaChecks() {
   ok("…y la guía lo refleja", encendido?.enabled === true && encendido?.guide?.enabled === true);
   const r2 = await raiz();
   ok("con todo listo y encendido la raíz manda a la Bandeja", mandaA("/inbox")(r2), r2);
+  ok("w035 — …y el menú ya no ofrece la guía", !(await menuConGuia()));
   const htmlEncendido = await pantallaHtml();
   ok(
     "la guía sigue disponible y dice que Sofi ya está contestando",

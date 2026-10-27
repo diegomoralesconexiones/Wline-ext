@@ -11,6 +11,7 @@ import { enabledChannels } from "@/server/channels/enabled";
 import { navKicker } from "@/lib/channels";
 import { avisoIaDe } from "@/server/ai/aviso";
 import { AvisoIaBanner } from "@/components/avisos/aviso-ia";
+import { guideFirst } from "@/server/onboarding/guide";
 
 export default async function AppLayout({
   children,
@@ -27,6 +28,9 @@ export default async function AppLayout({
   // bot roto. Se resuelve en el servidor y en el layout para que se vea desde
   // CUALQUIER pantalla, no solo desde el panel de un contacto (#85).
   const aviso = await avisoIaDe(session.organizationId);
+  // w035 — La «Guía de inicio» sale del menú con la misma regla que manda `/`
+  // a la guía: con todo listo ya no está, y vuelve sola si algo se rompe.
+  const guidePending = await guideFirst(session);
 
   return (
     <AppShell
@@ -42,6 +46,7 @@ export default async function AppLayout({
       // prop, igual que los canales de la Bandeja. El nav es un componente de
       // cliente: no puede —ni debe— leer variables de entorno.
       agenda={agendaEnabled()}
+      guidePending={guidePending}
       kicker={navKicker([...enabledChannels()])}
       aviso={<AvisoIaBanner aviso={aviso} />}
     >

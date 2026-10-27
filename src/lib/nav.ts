@@ -50,11 +50,18 @@ export const SETTINGS_ITEM: NavItem = {
 export function appNavGroups({
   agenda = false,
   role,
+  guidePending = true,
 }: {
   /** 015 — "Citas" solo existe si esta instancia encendió la agenda. */
   agenda?: boolean;
   /** #86 — La guía de inicio solo para quien puede configurar. */
   role?: string | null;
+  /**
+   * w035 — ¿A la guía le queda algo? Lo decide el servidor con `guideFirst`,
+   * la misma regla que manda `/` a la guía: con todo listo sale del menú y
+   * vuelve sola si algo se rompe. Sin el dato, se queda como antes.
+   */
+  guidePending?: boolean;
 }): NavGroup[] {
   const trabajo: NavItem[] = [
     { href: "/inbox", label: "Bandeja", icon: Inbox, badge: true },
@@ -67,7 +74,7 @@ export function appNavGroups({
 
   const agente: NavItem[] = [];
   // Un miembro del equipo no puede hacer ninguno de los pasos de la guía.
-  if (canConfigure(role)) {
+  if (canConfigure(role) && guidePending) {
     agente.push({ href: "/onboarding", label: "Guía de inicio", icon: ListChecks });
   }
   agente.push(
