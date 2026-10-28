@@ -48,6 +48,19 @@ describe("barra lateral agrupada", () => {
     }
   });
 
+  it("w035 — la guía sale del menú cuando ya no le queda nada a quien configura", () => {
+    for (const role of ["owner", "admin"]) {
+      const hrefs = appNavGroups({ role, guidePending: false }).flatMap((g) => g.items).map((i) => i.href);
+      expect(hrefs).not.toContain("/onboarding");
+      // Lo demás del grupo Agente sigue igual.
+      expect(hrefs).toEqual(expect.arrayContaining(["/agent", "/lab"]));
+      expect(appNavGroups({ role, guidePending: true })[1]!.items[0]!.href).toBe("/onboarding");
+    }
+    // Pendiente no le abre la guía a quien no puede hacer ningún paso.
+    const miembro = appNavGroups({ role: "member", guidePending: true }).flatMap((g) => g.items);
+    expect(miembro.map((i) => i.href)).not.toContain("/onboarding");
+  });
+
   it("solo la Bandeja lleva el contador y Ajustes queda fuera de los grupos", () => {
     const todos = appNavGroups({ agenda: true, role: "owner" }).flatMap((g) => g.items);
     expect(todos.filter((i) => i.badge).map((i) => i.href)).toEqual(["/inbox"]);

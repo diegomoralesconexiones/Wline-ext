@@ -25,7 +25,8 @@ solo la raíz; el menú lleva a cualquier pantalla.
    (`ring`); «Conecta tu agente» lleva la insignia **Opcional**. Al final, la
    tarjeta «Al final: encender a tu agente» explica que empieza apagado y que
    el botón aparece con los pasos listos y el agente conectado. En el menú,
-   arriba de Bandeja: **Guía de inicio**.
+   arriba de Bandeja: **Guía de inicio** (el arnés lo mira en el HTML de
+   `/inbox`, por `href="/onboarding"`: la guía lo dice en su encabezado).
 3. `GET /api/onboarding/status` con la sesión.
    ✅ **200** `{steps, enabled:false, guide}`; `steps` trae `profile`, `ai`,
    `whatsapp`, `brain` y `calendar` (`not_applicable` sin agenda, y entonces
@@ -70,16 +71,19 @@ solo la raíz; el menú lleva a cualquier pantalla.
    ✅ `guide.complete:true`, `brainConnected:false`; la tarjeta final dice
    «Listo: Vocero funciona como bandeja manual» con el enlace a la receta, sin
    botón de encender. `GET /` → **307** a `/inbox`: la bandeja manual no se
-   queda atrapada en la guía.
+   queda atrapada en la guía. (w035) El menú, el riel y Ctrl+K ya no ofrecen
+   «Guía de inicio».
    ✅ `PUT /api/agent/profile {enabled:true}` → **409** `sin_cerebro`.
 10. **Con agente** conectado y sano, y el interruptor apagado.
    ✅ `guide.complete:true`, `brainConnected:true`, `enabled:false`; `GET /`
    sigue mandando a `/onboarding`; la tarjeta final ofrece **Encender a
-   <nombre>**.
+   <nombre>**, y el menú vuelve a ofrecer «Guía de inicio».
 11. Pulsar **Encender** (`PUT /api/agent/profile {enabled:true}`).
     ✅ `enabled:true`; la tarjeta dice «<nombre> ya está contestando» con
     «Ir a la Bandeja»; `GET /` → **307** a `/inbox`: la guía dejó de ser la
-    primera pantalla (sigue en el menú para revisarla).
+    primera pantalla. (w035) El menú, el riel y Ctrl+K ya no la ofrecen
+    (`router.refresh()` tras encender: desaparece en el acto); `/onboarding`
+    sigue cargando por URL.
 
 ## Camino infeliz y guardas
 
@@ -90,3 +94,8 @@ solo la raíz; el menú lleva a cualquier pantalla.
     deja configurado el agente (paso 1 listo) pero no puede vincular una llave
     de IA, un número ni un agente → la guía sigue siendo la primera pantalla y
     lo dice; la Bandeja con la demo está a un clic en el menú.
+14. (w035) Con la guía completa, algo se rompe después (se borra el número,
+    Meta rechaza el token, el proveedor rechaza la llave): en la siguiente
+    carga «Guía de inicio» vuelve sola al menú, porque sale de la misma regla
+    que la raíz (`guideFirst`). El arnés lo ve en cada re-corrida: arranca
+    desde todo listo, vuelve al punto de partida y el paso 2 la encuentra.

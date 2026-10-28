@@ -31,6 +31,7 @@ export function AppShell({
   apariencia,
   commit,
   agenda = false,
+  guidePending,
   kicker,
   aviso = null,
   children,
@@ -43,6 +44,8 @@ export function AppShell({
   commit?: ResolvedCommit;
   /** 015 — ¿esta instancia tiene agenda? Lo decide el servidor. */
   agenda?: boolean;
+  /** w035 — ¿A la guía de inicio le queda algo? Lo decide el servidor. */
+  guidePending?: boolean;
   /** 028 — La etiqueta bajo el logo (`navKicker`). */
   kicker?: string;
   /**
@@ -95,6 +98,7 @@ export function AppShell({
         role={role}
         apariencia={apariencia}
         agenda={agenda}
+        guidePending={guidePending}
         kicker={kicker}
         open={navOpen}
         onClose={() => setNavOpen(false)}
@@ -117,7 +121,7 @@ export function AppShell({
         {/* 056 — El tiempo real caído se ve desde cualquier pantalla. */}
         <BandaSinConexion />
         {/* 055 — Ctrl+K y «?» desde cualquier pantalla. */}
-        <AtajosGlobales agenda={agenda} role={role} />
+        <AtajosGlobales agenda={agenda} role={role} guidePending={guidePending} />
 
         {/* La Bandeja trae sus propias tarjetas (lista, hilo, panel); el resto
             de las pantallas vive en una sola. */}
