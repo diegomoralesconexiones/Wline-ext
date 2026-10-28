@@ -1,6 +1,6 @@
 # Spec w036 — Wline-ext a Vocero 2.5.2 (la Bandeja rápida)
 
-**Rama**: `chore/actualizar-2.5.2` | **Fecha**: 2026-10-28 | **Estado**: Fusionada en la rama, gate y E2E en verde; falta PR, etiqueta y producción
+**Rama**: `chore/actualizar-2.5.2` | **Fecha**: 2026-10-28 | **Estado**: En producción con `2.5.2-wline.1` ([PR #7](https://github.com/diegomoralesconexiones/Wline-ext/pull/7)); falta la prueba con un mensaje real (T016)
 
 Plan maestro de la fusión de `kevinrivm/vocero-crm` (upstream) en
 `diegomoralesconexiones/Wline-ext` (origin). Todo lo de abajo se midió con
