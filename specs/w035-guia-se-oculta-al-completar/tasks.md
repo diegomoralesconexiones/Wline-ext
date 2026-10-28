@@ -22,6 +22,11 @@ este repositorio o no se deshace solo.
   - Los 11 fallos restantes (`window_closed` en envíos a BSUID, Argentina, imagen y ubicación, y un handoff) salen igual contra `main` con la misma base: vienen de reusar la base, no del cambio.
   - Contra `main`, las 2 de w035 que piden que la guía no esté fallan, como debe ser.
   - En el navegador, con la guía completa, ni el lateral ni el riel muestran la entrada, y Ctrl+K con «gu» responde «Nada coincide».
-- [ ] T006 **Preguntar antes**. Commit en rama, PR a `main` del fork y deploy a `wline-ext.morales-tec.xyz`. Al final se ve en vivo que la entrada ya no está.
+- [x] T006 **Preguntar antes**. Commit en rama, PR a `main` del fork y deploy a `wline-ext.morales-tec.xyz`. Al final se ve en vivo que la entrada ya no está.
   - El **Dueño** aprobó el commit y el PR (2026-10-27).
-  - El merge y el deploy siguen pendientes de su visto bueno.
+  - PR #5 mergeado (`a6477b3`, 2026-10-28) con los 6 checks en verde. El de `default` se reintentó: falló al descargar las fuentes de Google en el build, ajeno al cambio.
+  - Etiqueta `v2.5.1-wline.2` → *Imagen* publicó `ghcr.io/diegomoralesconexiones/wline-ext:2.5.1-wline.2`, que se baja sin credenciales.
+  - Coolify `Wline-ext` pasó de `2.5.1-wline.1` a `2.5.1-wline.2` y se redesplegó en 65 s.
+  - `/api/health`: `a6477b3` con `commitVerified: true`, migraciones aplicadas, despacho a `nea-wline-ext:8000` y 0 webhooks pendientes.
+  - El **Dueño** confirmó con su sesión que la entrada ya no aparece (2026-10-28).
+  - Vuelta atrás: etiqueta `2.5.1-wline.1` en Coolify y redesplegar.
