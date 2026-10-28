@@ -1,6 +1,6 @@
 # Spec w035 — La «Guía de inicio» sale del menú cuando ya no hay nada que hacer
 
-**Rama**: `fix/guia-se-oculta-al-completar` | **Fecha**: 2026-10-27 | **Estado**: en PR
+**Rama**: `fix/guia-se-oculta-al-completar` | **Fecha**: 2026-10-27 | **Estado**: en producción desde el 2026-10-28 (`2.5.1-wline.2`)
 
 ## Contexto
 
