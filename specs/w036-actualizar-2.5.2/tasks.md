@@ -58,13 +58,13 @@ Los comandos van en Git Bash desde `C:\Users\diego\GitHub\Wline-ext`.
 
   Repetida al final de la tanda, la 064 da 10/13: las 3 de la insignia no pueden medir porque la cuenta ya tiene más de 99 no leídos y la insignia muestra `99+` (el guion hace `Number("99+")`). Las de peticiones vuelven a pasar (2, 0, 2).
 - [x] T012 Estado de esta spec al día. `specs/README.md` es de Kevin y no lista las `w`: no se toca.
-- [ ] T013 **Preguntar antes**. Push de la rama y PR a `main` del fork con CI en verde. El merge lo aprueba el **Dueño**, con merge commit (no squash: el squash borra la ascendencia de Kevin y la próxima actualización vuelve a traer la 064).
+- [x] T013 **Preguntar antes** (el Dueño aprobó «hasta producción»). [PR #7](https://github.com/diegomoralesconexiones/Wline-ext/pull/7) con los 6 checks en verde, fusionado con merge commit `2a541f5` (no squash: el squash borra la ascendencia de Kevin y la próxima actualización vuelve a traer la 064). El árbol de `main` es idéntico al de la rama probada.
 
   ```bash
   git push -u origin chore/actualizar-2.5.2
   ```
 
-- [ ] T014 **Preguntar antes**. Etiqueta propia sobre el merge de `main`, subida **por nombre**. Nunca `git push --tags` ni `--follow-tags` (riesgo 2).
+- [x] T014 **Preguntar antes**. Etiqueta `v2.5.2-wline.1` sobre `2a541f5`, subida **por nombre**; en origin no hay `v2.5.2`. Nunca `git push --tags` ni `--follow-tags` (riesgo 2). Ojo: con el remoto `upstream`, `gh run list` sin `--repo` muestra las corridas de **Kevin**.
 
   ```bash
   git fetch origin && git tag -a v2.5.2-wline.1 origin/main -m "Wline-ext 2.5.2-wline.1: Vocero 2.5.2 con D1, D2, D8 y w035"
@@ -73,11 +73,17 @@ Los comandos van en Git Bash desde `C:\Users\diego\GitHub\Wline-ext`.
 
   Verificar en *Imagen* que publica `wline-ext:2.5.2-wline.1` y que no hay `wline-ext:2.5.2` (AC4).
 
-## Fase 4 — Producción (pendiente)
+  AC4 en verde: el workflow de la etiqueta terminó bien y el registro tiene `2.5.2-wline.1` (`sha256:7b01632…`); no hay `2.5.2`, `2.5` ni `latest`. `gh api` no lista paquetes sin `read:packages`: se consulta `ghcr.io/v2/…/tags/list` con un token anónimo.
 
-- [ ] T015 **Preguntar antes**. Coolify (agente `deploy-ops`): imagen `2.5.2-wline.1` en `Wline-ext` y **redespliegue** (un reinicio no cambia la imagen). Nea no se toca.
-- [ ] T016 `/api/health` en 200 con 2.5.2, «Quién responde» con Nea, la Bandeja abre y su contador cambia con un mensaje real (AC5). Si algo falla: imagen `2.5.1-wline.2` y redesplegar.
-- [ ] T017 Borrar el worktree: `Remove-Item -LiteralPath "\\?\C:\Users\diego\GitHub\Wline-ext-2.5.2" -Recurse -Force` y `git worktree prune` (`git worktree remove` falla con «Filename too long»).
+## Fase 4 — Producción (2026-10-28)
+
+- [x] T015 **Preguntar antes**. Coolify: imagen `2.5.2-wline.1` en `Wline-ext` y **redespliegue** (`affjauxurv7bckaaedc19rzn`, 55 s; un reinicio no cambia la imagen). Nea no se toca.
+- [x] T016 `/api/health` en 200 con 2.5.2, «Quién responde» con Nea, la Bandeja abre y su contador cambia con un mensaje real (AC5). Si algo falla: imagen `2.5.1-wline.2` y redesplegar.
+  - Sin sesión: `/api/health` 200 con `2.5.2` y commit `2a541f5`; el log dice «migraciones aplicadas» y «despacho al cerebro activo → nea-wline-ext:8000»; `nea-wline` está `running:healthy`; `/login` responde.
+  - Con la sesión del Dueño, en su Edge (20:09–20:18 UTC): «Quién responde» dice «Nea · en línea · v2.0.2-wline-ext.1», despacho «Activo · nea-wline-ext:8000», sin pendientes ni fallos. La Bandeja carga en 433 ms, sin nada en consola, y pide la lista 2 veces al abrir (la Bandeja y el menú, en frío).
+  - Mensaje real desde el WhatsApp Web del Dueño, con su visto bueno: «Hola, prueba de Wline 2.5.2» a las 20:17:21. Antes hubo que pulsar **Reactivar IA** en «Diego», que seguía en atención humana desde el 27; si no, Nea no contesta. A las 20:17:24 el menú pasó de 0 a 1 y «Diego» quedó primera. Toda la vuelta costó 2 pedidos de la lista, uno por mensaje.
+  - Nea contestó a las 20:17:40 y la respuesta llegó al teléfono. Su log: `POST /vocero/dispatch` 20:17:31 → `context` → `typing` → `profile` → `llm/chat/completions` → `POST /api/bot/messages` 200 a las 20:17:40. `GET /api/bot/availability` da 404 porque la agenda está apagada; no es un fallo.
+- [x] T017 Borrar el worktree: `Remove-Item -LiteralPath "\\?\C:\Users\diego\GitHub\Wline-ext-2.5.2" -Recurse -Force` y `git worktree prune` (`git worktree remove` falla con «Filename too long»). Se borró antes de subir este commit, que se empujó desde la checkout principal sin cambiar de rama.
 
 ## Lecciones
 
