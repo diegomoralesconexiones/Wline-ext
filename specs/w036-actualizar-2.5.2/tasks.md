@@ -78,10 +78,12 @@ Los comandos van en Git Bash desde `C:\Users\diego\GitHub\Wline-ext`.
 ## Fase 4 — Producción (2026-10-28)
 
 - [x] T015 **Preguntar antes**. Coolify: imagen `2.5.2-wline.1` en `Wline-ext` y **redespliegue** (`affjauxurv7bckaaedc19rzn`, 55 s; un reinicio no cambia la imagen). Nea no se toca.
-- [ ] T016 `/api/health` en 200 con 2.5.2, «Quién responde» con Nea, la Bandeja abre y su contador cambia con un mensaje real (AC5). Si algo falla: imagen `2.5.1-wline.2` y redesplegar.
-  - Hecho sin sesión: `/api/health` 200 con `2.5.2` y commit `2a541f5`; el log dice «migraciones aplicadas» y «despacho al cerebro activo → nea-wline-ext:8000»; `nea-wline` está `running:healthy`; `/login` responde.
-  - Falta, con la sesión del Dueño: «Quién responde», la Bandeja y su contador con un mensaje real, y la respuesta de Nea.
-- [ ] T017 Borrar el worktree: `Remove-Item -LiteralPath "\\?\C:\Users\diego\GitHub\Wline-ext-2.5.2" -Recurse -Force` y `git worktree prune` (`git worktree remove` falla con «Filename too long»).
+- [x] T016 `/api/health` en 200 con 2.5.2, «Quién responde» con Nea, la Bandeja abre y su contador cambia con un mensaje real (AC5). Si algo falla: imagen `2.5.1-wline.2` y redesplegar.
+  - Sin sesión: `/api/health` 200 con `2.5.2` y commit `2a541f5`; el log dice «migraciones aplicadas» y «despacho al cerebro activo → nea-wline-ext:8000»; `nea-wline` está `running:healthy`; `/login` responde.
+  - Con la sesión del Dueño, en su Edge (20:09–20:18 UTC): «Quién responde» dice «Nea · en línea · v2.0.2-wline-ext.1», despacho «Activo · nea-wline-ext:8000», sin pendientes ni fallos. La Bandeja carga en 433 ms, sin nada en consola, y pide la lista 2 veces al abrir (la Bandeja y el menú, en frío).
+  - Mensaje real desde el WhatsApp Web del Dueño, con su visto bueno: «Hola, prueba de Wline 2.5.2» a las 20:17:21. Antes hubo que pulsar **Reactivar IA** en «Diego», que seguía en atención humana desde el 27; si no, Nea no contesta. A las 20:17:24 el menú pasó de 0 a 1 y «Diego» quedó primera. Toda la vuelta costó 2 pedidos de la lista, uno por mensaje.
+  - Nea contestó a las 20:17:40 y la respuesta llegó al teléfono. Su log: `POST /vocero/dispatch` 20:17:31 → `context` → `typing` → `profile` → `llm/chat/completions` → `POST /api/bot/messages` 200 a las 20:17:40. `GET /api/bot/availability` da 404 porque la agenda está apagada; no es un fallo.
+- [x] T017 Borrar el worktree: `Remove-Item -LiteralPath "\\?\C:\Users\diego\GitHub\Wline-ext-2.5.2" -Recurse -Force` y `git worktree prune` (`git worktree remove` falla con «Filename too long»). Se borró antes de subir este commit, que se empujó desde la checkout principal sin cambiar de rama.
 
 ## Lecciones
 
